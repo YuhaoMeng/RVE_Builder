@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RVE Builder — Help Manual</title>
+<link rel="icon" href="images/icon.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+<!-- MathJax for any math expressions -->
+<script>
+  MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img src="images/icon.png" alt="">
+    <div>
+      <div class="title">RVE Builder</div>
+      <div class="subtitle">Help Manual · UDFRPs Plugin for Abaqus 2024</div>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div id="lang-switch" class="seg-control" role="radiogroup" aria-label="Language">
+      <button type="button" class="seg-btn" data-lang="en" role="radio" aria-checked="false">EN</button>
+      <button type="button" class="seg-btn" data-lang="zh" role="radio" aria-checked="false">中文</button>
+      <button type="button" class="seg-btn" data-lang="pt" role="radio" aria-checked="false">PT</button>
+    </div>
+    <button id="theme-toggle" class="btn-ghost" title="Toggle theme">Dark</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar TOC -->
+  <aside class="sidebar">
+    <input type="search" id="toc-search" placeholder="Filter sections…">
+    <nav id="toc">
+      <a class="toc-link" data-section="intro">1 · Introduction</a>
+      <a class="toc-link" data-section="install">2 · Installation</a>
+      <div class="toc-group-label">3 · Tabs</div>
+      <a class="toc-link" data-section="tab1_create_rve">3.1 · Create RVE</a>
+      <a class="toc-link" data-section="tab2_mesh">3.2 · Mesh Control</a>
+      <a class="toc-link" data-section="tab3_materials">3.3 · Materials</a>
+      <a class="toc-link" data-section="tab4_void">3.4 · Void Insertion</a>
+      <a class="toc-link" data-section="tab5_interface">3.5 · Interface</a>
+      <a class="toc-link" data-section="tab6_analysis">3.6 · Analysis</a>
+      <a class="toc-link" data-section="qanda">4 · Q&amp;A</a>
+      <a class="toc-link" data-section="reference">5 · References</a>
+      <a class="toc-link" data-section="acknowledgements">6 · Acknowledgements</a>
+      <a class="toc-link" data-section="disclaimer">7 · Disclaimer &amp; License</a>
+    </nav>
+    <div class="sidebar-footer">
+      <small>Last updated: 2026-06</small>
+    </div>
+  </aside>
+
+  <!-- Main content area -->
+  <main id="content">
+    <div class="loading">Loading…</div>
+  </main>
+</div>
+
+<button id="back-to-top" title="Back to top" aria-label="Back to top">↑</button>
+
+<script src="script.js"></script>
+</body>
+</html>

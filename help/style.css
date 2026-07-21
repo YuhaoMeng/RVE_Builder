@@ -1,0 +1,552 @@
+/* =========================================================================
+   RVE Builder Help Manual — single stylesheet
+   - All visual styling lives here. Content HTML files only carry semantics.
+   - To restyle the site (colors, fonts, spacing) edit ONLY this file.
+   ========================================================================= */
+
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f6f8fa;
+  --bg-code: #f3f4f6;
+  --fg: #1f2328;
+  --fg-soft: #57606a;
+  --accent: #1f6feb;
+  --accent-soft: #ddf4ff;
+  --border: #d0d7de;
+  --warn-bg: #fff8c5;
+  --warn-border: #d4a72c;
+  --note-bg: #ddf4ff;
+  --note-border: #54aeff;
+  --tip-bg: #dafbe1;
+  --tip-border: #4ac26b;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --header-h: 56px;
+  --sidebar-w: 280px;
+}
+
+[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-soft: #161b22;
+  --bg-code: #1c2128;
+  --fg: #e6edf3;
+  --fg-soft: #8b949e;
+  --accent: #58a6ff;
+  --accent-soft: #1f3a5f;
+  --border: #30363d;
+  --warn-bg: #3a2e0a;
+  --warn-border: #d29922;
+  --note-bg: #0c2d6b;
+  --note-border: #1f6feb;
+  --tip-bg: #04361b;
+  --tip-border: #2ea043;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+  scroll-behavior: smooth;
+}
+
+/* ----- Top bar ---------------------------------------------------------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand img { width: 32px; height: 32px; }
+.brand .title { font-size: 16px; font-weight: 600; }
+.brand .subtitle { font-size: 12px; color: var(--fg-soft); }
+.topbar-actions { display: flex; gap: 8px; }
+.btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-ghost:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+/* Segmented language switch: EN / 中文 / PT — only one can be active. */
+.seg-control {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.seg-control .seg-btn {
+  background: transparent;
+  color: var(--fg-soft);
+  border: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  min-width: 44px;
+  font-family: inherit;
+}
+.seg-control .seg-btn:last-child { border-right: none; }
+.seg-control .seg-btn:hover { background: var(--accent-soft); color: var(--fg); }
+.seg-control .seg-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.seg-control .seg-btn.active:hover { background: var(--accent); color: var(--bg); }
+
+/* ----- Layout ----------------------------------------------------------- */
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: calc(100vh - var(--header-h));
+}
+
+/* ----- Sidebar ---------------------------------------------------------- */
+.sidebar {
+  position: sticky;
+  top: var(--header-h);
+  height: calc(100vh - var(--header-h));
+  background: var(--bg-soft);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#toc-search {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+#toc { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.toc-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-soft);
+  margin: 12px 0 4px 8px;
+}
+.toc-link {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.toc-link:hover { background: var(--accent-soft); color: var(--accent); }
+.toc-link.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+.sidebar-footer { margin-top: 12px; color: var(--fg-soft); text-align: center; }
+
+/* ----- Main content ----------------------------------------------------- */
+main {
+  padding: 32px 48px 80px;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+}
+.loading {
+  text-align: center;
+  color: var(--fg-soft);
+  padding: 40px;
+}
+
+/* ----- Headings --------------------------------------------------------- */
+main h1, main h2, main h3, main h4 {
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+  line-height: 1.3;
+}
+main h1 {
+  font-size: 28px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 8px;
+  margin-top: 0;
+}
+main h2 {
+  font-size: 22px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+main h3 { font-size: 18px; color: var(--accent); }
+main h4 { font-size: 15px; }
+
+main p { margin: 0.6em 0; }
+
+/* ----- Links, code ------------------------------------------------------ */
+main a { color: var(--accent); }
+main a:hover { text-decoration: underline; }
+main code {
+  background: var(--bg-code);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92em;
+}
+main pre {
+  background: var(--bg-code);
+  padding: 12px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+main pre code { background: transparent; padding: 0; }
+
+/* ----- Lists ------------------------------------------------------------ */
+main ul, main ol { padding-left: 1.6em; margin: 0.5em 0; }
+main li { margin: 0.25em 0; }
+
+/* ----- Tables ----------------------------------------------------------- */
+main table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 14px;
+}
+main th, main td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+main th {
+  background: var(--bg-soft);
+  font-weight: 600;
+}
+main tr:nth-child(even) td { background: var(--bg-soft); }
+
+/* ----- Images / Figures ------------------------------------------------- */
+.figure {
+  margin: 1.5em 0;
+  text-align: center;
+}
+.figure img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  padding: 4px;
+  box-shadow: var(--shadow);
+}
+.figure figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--fg-soft);
+  font-style: italic;
+}
+.figure-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ----- Callouts (note / tip / warn) ------------------------------------- */
+.callout {
+  border-left: 4px solid var(--border);
+  background: var(--bg-soft);
+  padding: 10px 14px;
+  margin: 1em 0;
+  border-radius: 4px;
+}
+.callout .callout-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.callout-note { background: var(--note-bg); border-color: var(--note-border); }
+.callout-tip  { background: var(--tip-bg);  border-color: var(--tip-border); }
+.callout-warn { background: var(--warn-bg); border-color: var(--warn-border); }
+.callout p:first-child { margin-top: 0; }
+.callout p:last-child  { margin-bottom: 0; }
+
+/* ----- Collapsible (interactive) --------------------------------------- */
+details.collapsible {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin: 1em 0;
+  background: var(--bg-soft);
+}
+details.collapsible[open] { background: var(--bg); }
+details.collapsible > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+details.collapsible > summary::before {
+  content: "▶";
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+details.collapsible[open] > summary::before { transform: rotate(90deg); }
+
+/* ----- Inline tabs (interactive) --------------------------------------- */
+.inline-tabs { margin: 1em 0; }
+.inline-tabs .tab-buttons {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 0;
+}
+.inline-tabs .tab-btn {
+  background: transparent;
+  border: none;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--fg-soft);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+.inline-tabs .tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.inline-tabs .tab-panel { display: none; padding: 14px 4px; }
+.inline-tabs .tab-panel.active { display: block; }
+
+/* ----- Field reference table -------------------------------------------- */
+/*
+ * Tables follow the browser's automatic column-width negotiation. The trick
+ * is to let it work *cleanly*: text in body cells wraps at word boundaries,
+ * long <code> tokens (file names, paths) are allowed to break at any
+ * character so they do not push their column out of the viewport, and
+ * headers never wrap so words like "Default" or short labels like "Vf cap"
+ * stay on a single line. This avoids the failure modes where one column
+ * gets squeezed to a single character per line while another sits empty.
+ */
+table {
+  table-layout: auto;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Headers are short, known labels -- never wrap them. The column then
+   reserves enough width for the header in the auto-layout pass. */
+.field-table th, .narrow-index-table th {
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Body cells: ordinary text wraps at word boundaries, top-aligned for
+   readability when the row is tall. */
+.field-table td, .narrow-index-table td {
+  vertical-align: top;
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Inside cells, long <code> tokens (file names, paths, identifiers) keep
+   their full width when there's room and only fall back to character-level
+   breaks if they would otherwise overflow the cell. word-break:normal
+   keeps the token together for column-width negotiation -- otherwise the
+   browser computes min-content as 1 char and squeezes the column. */
+.field-table td code,
+.narrow-index-table td code {
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+  display: inline-block;
+  max-width: 100%;
+}
+/* Cells that consist entirely of one or more <code> elements (typical for
+   the "File / File pattern" column) get a min-width so the column reserves
+   space proportional to its content. Multi-line code patterns (separated by
+   <br>) get extra width since they hold the longest tokens in the table. */
+.field-table td:has(> code:first-child:last-child) {
+  min-width: 20ch;
+}
+.field-table td:has(> code + br) {
+  min-width: 28ch;
+}
+
+/* First column with plain text (a label/category column like "Method" or
+   "Parameter"). Reserve enough width that medium-length phrases such as
+   "Random Sequential Expansion (RSE)" do not get squeezed to one word per
+   line while the right-hand "Notes" column sits empty. The browser is still
+   free to grow the column past this minimum -- this just stops the squeeze. */
+.field-table td:first-child {
+  min-width: 12ch;
+}
+
+/* Last column ("Notes", "Meaning", "Contents", "Purpose") usually carries
+   the most prose -- let it take whatever room the others don't claim, but
+   protect it from collapsing to a sliver when sibling columns are wide. */
+.field-table td:last-child {
+  min-width: 16ch;
+}
+
+/* Narrow first column: useful for tables whose first column holds a
+   short index or number (e.g., 1, 2, 3) and whose second column is wider. */
+.narrow-index-table th:first-child,
+.narrow-index-table td:first-child {
+  width: 5%;
+  text-align: center;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ----- Citation block (paper card) -------------------------------------- */
+.citation-card {
+  border-left: 4px solid var(--accent);
+  background: var(--bg-soft);
+  padding: 14px 18px;
+  margin: 1.5em 0;
+  border-radius: 6px;
+}
+.citation-card .cite-meta {
+  color: var(--fg-soft);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.citation-card .cite-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* ----- Seed calculator (interactive widget) ----------------------------- */
+.seed-calculator {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 1.5em 0;
+  background: var(--bg-soft);
+}
+.seed-calculator h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: var(--accent);
+}
+.seed-calculator .calc-grid {
+  display: grid;
+  /* Each column is at least 200px wide; below that they auto-stack so the
+     label text never gets squeezed into a strip narrower than its content. */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px 18px;
+  align-items: stretch;
+}
+.seed-calculator label {
+  /* Block layout (not flex) so the label text and its inline <sub> stay on
+     the same line. A flex-column label would treat each text node and inline
+     element as its own item, pushing the subscript onto a new line. */
+  display: block;
+  font-size: 13px;
+  color: var(--fg-soft);
+  white-space: normal;
+  min-width: 0;
+  line-height: 1.4;
+}
+.seed-calculator label sub {
+  /* Keep the subscript inline with the variable letter it modifies. */
+  font-size: 0.78em;
+  vertical-align: sub;
+  line-height: 1;
+  white-space: nowrap;
+}
+.seed-calculator input[type="number"] {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  width: 100%;
+  min-width: 0;        /* avoid grid overflow */
+  box-sizing: border-box;
+}
+.seed-calculator .calc-output {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+  font-size: 14px;
+}
+.seed-calculator .calc-output > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seed-calculator .calc-output span[data-calc] {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--accent);
+  font-weight: 600;
+  margin-left: 4px;
+}
+@media (max-width: 600px) {
+  .seed-calculator .calc-grid { grid-template-columns: 1fr; }
+  .seed-calculator .calc-output { grid-template-columns: 1fr; }
+}
+
+/* ----- Button to top ---------------------------------------------------- */
+#back-to-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--fg);
+  font-size: 18px;
+  cursor: pointer;
+  display: none;
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+#back-to-top.visible { display: block; }
+#back-to-top:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ----- Print ------------------------------------------------------------ */
+@media print {
+  .topbar, .sidebar, #back-to-top { display: none; }
+  .layout { display: block; }
+  main { max-width: 100%; padding: 0; }
+}
+
+/* ----- Mobile ----------------------------------------------------------- */
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  main { padding: 20px; }
+}
