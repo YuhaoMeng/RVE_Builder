@@ -1,0 +1,53 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ---------- Abaqus run / job artifacts ----------
+# (generated when analyses run; should never be committed)
+*.cae
+*.jnl
+*.inp
+*.odb
+*.lck
+*.log
+*.dat
+*.msg
+*.sta
+*.prt
+*.sim
+*.stt
+*.com
+*.ipm
+*.mdl
+*.res
+*.abq
+*.pac
+*.sel
+*.fil
+*.rec
+*.rpy
+*.rpy.*
+*.SMABulk
+*.SMAManifest
+abaqus.rpy*
+abaqus_acis.log
+fort.*
+explicit.*
+standard.*
+
+# ---------- OS / editor ----------
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+.idea/
+.vscode/
+
+# ---------- Local backups / scratch ----------
+_backup_*/
+_to_delete/
+*_BACKUP_*
+*.bak
