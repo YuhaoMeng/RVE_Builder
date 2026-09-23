@@ -5,35 +5,47 @@
 # Generates 2D fiber-center coordinates for a UDFRP RVE using the
 # Random Sequential Expansion (RSE) algorithm. Imported by
 # RVE_Builder_UDFRPs.CreateRVE when algorithm == 2.
+#
+# -----------------------------------------------------------------------------
+# Part of the "RVE Builder (UDFRPs)" Abaqus/CAE plug-in.
+# Copyright (C) 2026 Yuhao Meng
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.  You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# The PBC homogenization kernels shipped with this plug-in are derived from
+# EasyPBC, Copyright (C) 2018 Sadik Lafta Omairey, distributed under the GNU
+# GPL; see the individual PBC_UDFRP_*.py files.
+# -----------------------------------------------------------------------------
 ###############################################################################
 """
-## Used to generate 2D coordinates for the randomly distributed uniaxial continuous fiber RVE model.
+Generates 2D fibre-centre coordinates for a randomly distributed unidirectional
+continuous-fibre RVE with the Random Sequential Expansion (RSE) algorithm.
 
-## The code logic is based on the RSE algorithm.
+* "volume fraction first" or "RVE size first" control (control_options)
+* lmin / lmax: seeding distance range from an existing fibre
+* MIN_GAP: optional minimum surface-to-surface gap between any two fibres
+* BOUNDARY_CLEARANCE: keeps fibres away from RVE corners and thin edge slivers
+* writes the coordinates (with periodic images) to CSV together with
+  first/second nearest-neighbour distances, Ripley's K and the pair
+  distribution function
 
-## Allows parameters to be fine-tuned according to the user's choice to ensure
-     "volume fraction first" or "RVE size first".      
+Author: Yuhao Meng (yuhaomeng@oceanica.ufrj.br)
 
-## First/Second nearest neighbor distances, Ripley's K function, Pair Distribution Function
-
-## The code can be run stand-alone, please check ‘####’ at
-      # the "write to csv" function has been edited to fit Abaqus 2020 based on python version 2.7. 
-        please check the code "for python 2.7" and "for python 3.0" .
-      # The drawing commands require the installation of "matplotlib".
-
-## Code author: Yuhao Meng
-                yuhaomeng@oceanica.ufrj.br 
-
-## Refrence: 
-    1.  Lei Yang, Ying Yan, Zhiguo Ran, Yujia Liu,
-        A new method for generating random fiber distributions for fiber reinforced composites,
-        Composites Science and Technology, Volume 76, 2013, Pages 14-20, ISSN 0266-3538,
-        https://doi.org/10.1016/j.compscitech.2012.12.001.
-    2. https://github.com/qinguoming/MyPluginDevlopReposity/tree/master/500-RandomFiberRVEScript
-
-## Thank you for using this code. 
-   If you refer to this code in your related work, please cite it accordingly.
-
+References
+    Lei Yang, Ying Yan, Zhiguo Ran, Yujia Liu, A new method for generating
+    random fiber distributions for fiber reinforced composites, Composites
+    Science and Technology 76 (2013) 14-20,
+    https://doi.org/10.1016/j.compscitech.2012.12.001
+    https://github.com/qinguoming/MyPluginDevlopReposity/tree/master/500-RandomFiberRVEScript
 """
 
 import math, os
@@ -41,6 +53,23 @@ import random
 import csv
 import time
 import numpy as np
+
+# Boundary clearance, as a fraction of the fibre radius.  A candidate fibre is
+# rejected when a corner of the RVE lies inside or within this clearance of
+# the fibre, or when the fibre crosses an RVE edge (or stops short of it) by
+# less than this clearance.  This avoids fibres that cover an RVE corner (the
+# geometry kernel cannot split such a fibre into four periodic parts) and the
+# thin slivers that make meshing fail.  Set it to 0.0 to disable the check.
+BOUNDARY_CLEARANCE = 0.1
+
+# Minimum surface-to-surface gap between ANY two fibres (model units, same as
+# the fibre diameter).  lmin / lmax only control the seeding distance from the
+# parent fibre; other neighbours may come arbitrarily close, which is what makes
+# meshing fail when fibres nearly touch.  A value of about 0.03-0.05 df removes
+# such near-contacts.  It lowers the achievable Vf and, in Keep-Vf mode, raises
+# the number of re-rolled draws, so it is off by default.
+MIN_GAP = 0.0
+
 
 def RSE_algorithm(Basefolder, vf, df, a, b, file_suffix_range_Set, lmax, lmin, control_options):
     start_time_RSE_Method = time.time()
@@ -87,9 +116,64 @@ def RSE_algorithm(Basefolder, vf, df, a, b, file_suffix_range_Set, lmax, lmin, c
     folder_path = create_folder(Basefolder, vf, file_suffix_range_Set, N)
     
     # Save coordinates to CSV
+    # A config that jams short of the target (Keep-Vf mode only) is re-rolled up
+    # to MAX_CONFIG_RETRIES times before giving up, so one unlucky draw does not
+    # discard the configs already generated. Raise it if you still hit the limit.
+    target_frac = vf / 100.0
+    tol = max(1.0e-9, target_frac * 1.0e-6)
+    MAX_CONFIG_RETRIES = 20
+    config_retries = 0
+    best_vf_cfg = -1.0
+    best_n_cfg = 0
+    config_records = []          # one entry per saved configuration (for the check table)
+    config_start_time = time.time()
     while success_count < file_suffix_range_Set:
         fibers, current_vf, success = use_RSE_CreateRVE(vf0, vf, a, b, radius, lmax, lmin)
         if success:
+            # ---- (Keep-Vf mode only) require the target Vf; re-roll if short --
+            # Only control_options == 1 ("keep Vf") pre-sizes the cell for exactly
+            # N fibres, so it must place all N. If a draw jams short, re-roll this
+            # config (up to MAX_CONFIG_RETRIES) instead of aborting the whole run,
+            # so the configs already finished are kept. control_options == 2
+            # ("keep RVE size") accepts whatever packs and reports the actual Vf.
+            if control_options == 1 and current_vf < target_frac - tol:
+                if current_vf > best_vf_cfg:
+                    best_vf_cfg = current_vf
+                    best_n_cfg = len(fibers)
+                config_retries += 1
+                if config_retries <= MAX_CONFIG_RETRIES:
+                    continue        # re-roll silently; the count goes into the check table
+                # retries exhausted for this config -> stop the whole run
+                print(' ')
+                print('====================================================================')
+                print(' RSE could NOT reach the target fibre volume fraction - STOPPING.')
+                print('   Target Vf        : {:.4f}%   (needs N = {} fibres)'.format(target_frac * 100.0, N))
+                print('   Best of {:d} tries : {:.4f}%   (placed {} fibres)'.format(MAX_CONFIG_RETRIES + 1, best_vf_cfg * 100.0, best_n_cfg))
+                print('   Shortfall        : {:.4f}%   ({} fibre(s) short)'.format((target_frac - best_vf_cfg) * 100.0, N - best_n_cfg))
+                print(' Configs already finished (if any) are saved in the output folder.')
+                print(' Fix: lower BOTH lmin and lmax so new fibres are seeded closer to')
+                print('      existing ones (this raises the achievable packing density).')
+                print('      Current lmin = {}, lmax = {}. Try roughly halving them'.format(lmin, lmax))
+                print('      (e.g. lmin -> {:.4g}, lmax -> {:.4g}) and/or lower the target Vf,'.format(lmin / 2.0, lmax / 2.0))
+                print('      then run again.')
+                print('====================================================================')
+                print(' ')
+                raise ValueError(
+                    'RSE could not reach target {:.2f}% after {} tries (best {:.2f}%). '
+                    'Lower lmin/lmax to seed fibres closer, or reduce the target Vf, '
+                    'then re-run.'.format(target_frac * 100.0, MAX_CONFIG_RETRIES + 1, best_vf_cfg * 100.0))
+            # target met: record the outcome, reset the retry state, then save
+            config_records.append({
+                'config': success_count + 1,
+                'fibers': len(fibers),
+                'vf': current_vf * 100.0,
+                'rerolls': config_retries,
+                'time': time.time() - config_start_time,
+            })
+            config_start_time = time.time()
+            config_retries = 0
+            best_vf_cfg = -1.0
+            best_n_cfg = 0
             # existing save logic (saves the full coordinates including mirror images)
             valid_fibers = []
             unique_coords = set()
@@ -135,12 +219,16 @@ def RSE_algorithm(Basefolder, vf, df, a, b, file_suffix_range_Set, lmax, lmin, c
     elapsed_time_RSE_Method = end_time_RSE_Method - start_time_RSE_Method
     average_time_per_set_of_coordinates_created = elapsed_time_RSE_Method / file_suffix_range_Set
     
-    reported_vf = vf / 100.0 if control_options == 1 else current_vf
+    # Report the volume fraction that was ACTUALLY achieved, not the requested
+    # target. (Every generated config passed the target check above, so this is
+    # within one fibre of the target; it is never silently the raw target.)
+    reported_vf = current_vf
 
     # Save information in .txt file
     Output_Information(N, reported_vf, df, a, b, lmin, lmax, file_suffix_range_Set, 
                       average_time_per_set_of_coordinates_created, elapsed_time_RSE_Method, 
-                      folder_path, control_options_name)
+                      folder_path, control_options_name,
+                      target_vf=vf, config_records=config_records)
     
     # Info output
     print(' ')
@@ -148,7 +236,7 @@ def RSE_algorithm(Basefolder, vf, df, a, b, file_suffix_range_Set, lmax, lmin, c
     print('------------------------------ Info show ---------------------------')
     print('--------------------------------------------------------------------')
     print('Fixed parameter: {}\n'.format(control_options_name))
-    print(' Volume Fraction of Fiber                         {:.4f}%'.format(reported_vf * 100))
+    print(' Volume Fraction of Fiber (achieved)              {:.4f}%'.format(reported_vf * 100))
     print(' Diameter of fiber                                {}'.format(df))
     print(' Number of fibers                                 {}'.format(N))
     print(' RVE width                                        {}'.format(a))
@@ -284,117 +372,10 @@ def calculate_ripleys_k_rse(fiberList, a, b, radius, max_r_multiplier=15, num_po
     
     return r_normalized, K_values, K_random
 
-def calculate_periodic_distance(p1, p2, a, b):
-    """
-    Compute distance under periodic boundary conditions
-    
-    Args:
-        p1, p2: point coordinates (x, y)
-        a, b: RVE dimensions
-    
-    Returns:
-        shortest periodic distance
-    """
-    dx = abs(p1[0] - p2[0])
-    dy = abs(p1[1] - p2[1])
-    
-    # periodic boundary: take the shortest distance among mirror images
-    dx = min(dx, a - dx)
-    dy = min(dy, b - dy)
-    
-    return np.sqrt(dx**2 + dy**2)
 
 
 
-def calculate_all_periodic_distances(coords, a, b):
-    """
-    Compute the periodic distance matrix between all fiber pairs
-    
-    Args:
-        coords: (N, 2) fiber coordinate array
-        a, b: RVE dimensions
-    
-    Returns:
-        (N, N) distance matrix
-    """
-    n = len(coords)
-    dist_matrix = np.zeros((n, n))
-    
-    for i in range(n):
-        for j in range(i+1, n):
-            dist = calculate_periodic_distance(coords[i], coords[j], a, b)
-            dist_matrix[i, j] = dist
-            dist_matrix[j, i] = dist
-    
-    return dist_matrix
 
-
-
-def calculate_pair_distribution_function(coords, a, b, radius, max_r_multiplier=15, num_bins=100):
-    """
-    Compute the radial distribution function g(r) (with periodic boundaries)
-    
-    g(r) measures local density fluctuations relative to complete spatial randomness (CSR)
-    - for CSR, g(r) ~ 1 (for large enough r)
-    - g(r) > 1 indicates a clustering tendency
-    - g(r) < 1 indicates repulsion / ordering tendency
-    
-    fix: expected_count = (n-1)/2 * ring_area * intensity
-    (previously used n*(n-1)/2 * ring_area * intensity by mistake)
-    
-    Args:
-        coords: (N, 2) fiber coordinates
-        a, b: RVE dimensions
-        radius: fiber radius
-        max_r_multiplier: maximum radius
-        num_bins: number of bins
-    
-    Returns:
-        r_normalized: normalized radius
-        g_values: g(r) values
-    """
-    n = len(coords)
-    area = a * b
-    intensity = n / area  # number density (fibers/area)
-    
-    # distance matrix (diagonal excluded)
-    dist_matrix = calculate_all_periodic_distances(coords, a, b)
-    np.fill_diagonal(dist_matrix, np.inf)
-    
-    # extract all distances (upper triangle, n*(n-1)/2 pairs total)
-    all_distances = dist_matrix[np.triu_indices_from(dist_matrix, k=1)]
-    
-    # bin setup
-    max_r = max_r_multiplier * radius
-    r_bins = np.linspace(0, max_r, num_bins + 1)
-    r_centers = (r_bins[:-1] + r_bins[1:]) / 2
-    dr = r_bins[1] - r_bins[0]
-    
-    # compute distance histogram
-    counts, _ = np.histogram(all_distances, bins=r_bins)
-    
-    # compute g(r)
-    g_values = np.zeros(num_bins)
-    for i in range(num_bins):
-        r = r_centers[i]
-        if r < radius * 0.1:  # g(r) = 0 as r -> 0 (hard-core repulsion)
-            g_values[i] = 0
-        else:
-            # ring area: pi*[(r+dr/2)^2 - (r-dr/2)^2]
-            ring_area = np.pi * ((r + dr/2)**2 - (r - dr/2)**2)
-            
-            # for CSR, expected number of point pairs in the ring:
-            # expected_pairs = [n*(n-1)/2] * [ring_area / area]
-            #                = (n-1)/2 * intensity * ring_area
-            expected_count = (n - 1) / 2 * intensity * ring_area
-            
-            # g(r) = actual pairs / expected pairs
-            g_values[i] = counts[i] / expected_count if expected_count > 0 else 0
-    
-    # normalized radius
-    r_normalized = r_centers / radius
-    
-    return r_normalized, g_values
 
 
 def save_statistics_csv_rse(folder_path, nn1_data, nn2_data, ripley_data, pdf_data, config_num):
@@ -496,7 +477,6 @@ def calculate_pair_distribution_function_rse(fiberList, a, b, radius, max_r_mult
             # expected_pairs = [total pairs] * [ring area / total area]
             #                = [n*(n-1)/2] * [ring_area / area]
             #                = (n-1)/2 * ring_area * intensity
-            # 
             # note: NOT n*(n-1)/2, because intensity already includes n
             expected_count = (n - 1) / 2 * ring_area * intensity
             
@@ -622,22 +602,24 @@ def save_fiber_coordinates_to_csv(folder_path, fibers, N, success_count, a, b):
         for x, y in unique_fibers:
             writer.writerow([x, y])
 
-def generate_fiber_with_retries(preFiber, radius, lmin, lmax, a, b, max_attempts, all_fibers):
-    for _ in range(max_attempts):
-        tempFiber = GenerateFiber(preFiber, radius, lmin, lmax, a, b)
-        if is_fiber_valid(tempFiber, a, b, radius) and ISoverreach(tempFiber[0], tempFiber[1], radius, a, b) == 'in' and not IsintersectSelf(tempFiber, all_fibers):
-            return tempFiber
-    return None
 
 def round_fiber_data(fiber, decimal_places=15):
     return [round(value, decimal_places) if isinstance(value, float) else value for value in fiber]
 
 def use_RSE_CreateRVE(vf0, vf, a, b, radius, lmax, lmin):
     fiberList = []
+    # --- Packing effort.  Every draw packs to its jam point before fibres are
+    #     removed down to the target, so these two numbers set the cost of
+    #     confirming the jam.  Doubling them to 1000 / 1000 roughly triples the
+    #     time per draw and barely raises the jam density; a draw that still
+    #     falls short of N fibres is re-rolled in RSE_algorithm (Keep-Vf mode).
+    #   Num_try                      : placement tries per chosen neighbour fibre
+    #   max_attempts_without_success : consecutive dead-ends allowed before the
+    #                                  cell is declared "jammed" and packing stops
     Num_try = 500
     max_attempts_without_success = 500
     attempts_without_success = 0
-    cell_size = 2 * radius
+    cell_size = 2 * radius + MIN_GAP
 
     initFiber = FirstFiber(radius, a, b)
     if initFiber is None:
@@ -652,7 +634,7 @@ def use_RSE_CreateRVE(vf0, vf, a, b, radius, lmax, lmin):
             tempFiber = GenerateFiber(Fiber_i, radius, lmin, lmax, a, b)
             if tempFiber is None:
                 continue
-            if not IsintersectSelf(tempFiber, grid, a, b, radius, cell_size):
+            if not IsintersectSelf(tempFiber, grid, a, b, radius, cell_size, MIN_GAP):
                 fiberList.append(tempFiber)
                 add_fiber_to_grid_with_periodic(tempFiber, grid, a, b, cell_size)
                 success = True
@@ -683,7 +665,9 @@ def use_RSE_CreateRVE(vf0, vf, a, b, radius, lmax, lmin):
 
     return closest_fiberList, closest_vf, True
 
-def IsintersectSelf(nowfiber, grid, a, b, radius, cell_size):
+def IsintersectSelf(nowfiber, grid, a, b, radius, cell_size, min_gap=0.0):
+    """True when nowfiber (or any periodic image) comes closer than
+    2*radius + min_gap (centre to centre) to a fibre already in the grid."""
     nowfiber_centers = CalExpendCenter(nowfiber, a, b)
     for center_now in nowfiber_centers:
         x_now, y_now = center_now
@@ -695,29 +679,56 @@ def IsintersectSelf(nowfiber, grid, a, b, radius, cell_size):
                 for x_j, y_j, Fiber_j in grid[cell]:
                     if Fiber_j == nowfiber:
                         continue
-                    if P2Pdistance_squared((x_now, y_now), (x_j, y_j)) < 4 * radius * radius:
+                    if P2Pdistance_squared((x_now, y_now), (x_j, y_j)) < (2.0 * radius + min_gap) ** 2:
                         return True
     return False
 
 def FirstFiber(radius, a, b):
-    x1 = random.uniform(-radius, a + radius)
-    y1 = random.uniform(-radius, b + radius)
-    flag = ISoverreach(x1, y1, radius, a, b)
-    if flag != 'out':
-        return [x1, y1, radius, flag]
+    for _ in range(500):
+        x1 = random.uniform(-radius, a + radius)
+        y1 = random.uniform(-radius, b + radius)
+        flag = ISoverreach(x1, y1, radius, a, b)
+        if flag != 'out' and boundary_clearance_ok(x1, y1, radius, a, b):
+            return [x1, y1, radius, flag]
+    return None
 
 def GenerateFiber(preFiber, radius, lmin, lmax, a, b):
     for _ in range(500):
         xlast = preFiber[0]
         ylast = preFiber[1]
-        distance = random.uniform(lmin + 2 * radius, lmax + 2 * radius)
+        distance = random.uniform(max(lmin, MIN_GAP) + 2 * radius, lmax + 2 * radius)
         angle = random.uniform(0, 2 * math.pi)
         x = xlast + distance * math.cos(angle)
         y = ylast + distance * math.sin(angle)
         flag = ISoverreach(x, y, radius, a, b)
-        if flag != 'out':
+        if flag != 'out' and boundary_clearance_ok(x, y, radius, a, b):
             return [x, y, radius, flag]
     return None
+
+def boundary_clearance_ok(x, y, r, a, b, clearance=None):
+    """Return False when the fibre centred at (x, y) violates the boundary
+    clearance rule.  Coordinates are in the RVE frame [0, a] x [0, b].
+
+    * every RVE corner must stay at least r + h away from the centre (the
+      fibre must not cover or graze a corner);
+    * for every RVE edge the fibre must either cross it by at least h or stay
+      at least h away from it (no thin caps, no thin matrix strips),
+
+    where h = clearance * r (clearance defaults to BOUNDARY_CLEARANCE)."""
+    h = (BOUNDARY_CLEARANCE if clearance is None else clearance) * r
+    if h <= 0.0:
+        return True
+    # fast path: a fibre that stays at least h inside every edge passes
+    if r + h < x < a - r - h and r + h < y < b - r - h:
+        return True
+    for cx, cy in ((0.0, 0.0), (a, 0.0), (0.0, b), (a, b)):
+        if math.hypot(x - cx, y - cy) < r + h:
+            return False
+    for s in (x, a - x, y, b - y):
+        if r - h < abs(s) < r + h:
+            return False
+    return True
+
 
 def CalVolumeFraction(fiberlist, a, b, radius):
     area_fibers = len(fiberlist) * math.pi * radius ** 2
@@ -777,17 +788,6 @@ def is_fiber_valid(fiber, a, b, radius):
         return True
     return False
 
-def build_grid(fiberlist, a, b, cell_size):
-    grid = {}
-    for fiber in fiberlist:
-        x, y = fiber[0], fiber[1]
-        cell_x = int((x + a / 2) / cell_size)
-        cell_y = int((y + b / 2) / cell_size)
-        key = (cell_x, cell_y)
-        if key not in grid:
-            grid[key] = []
-        grid[key].append(fiber)
-    return grid
 
 def get_neighboring_cells(cell_x, cell_y):
     cells = []
@@ -863,7 +863,8 @@ def circle_rectangle_intersect(cx, cy, radius, rect):
     
     return distance_squared <= radius * radius
 
-def Output_Information(N, current_vf, df, a, b, lmin, lmax, file_suffix_range_Set, average_time_per_set_of_coordinates_created, elapsed_time_RSE_Method, folder_path, control_options_name):
+def Output_Information(N, current_vf, df, a, b, lmin, lmax, file_suffix_range_Set, average_time_per_set_of_coordinates_created, elapsed_time_RSE_Method, folder_path, control_options_name,
+                       target_vf=None, config_records=None):
     txt_name = "RVE2D_parameters_output_Vf_{:03d}_xy_{}units_{}fiber.txt".format(int(current_vf * 100 + 0.5), file_suffix_range_Set, N)
     txt_save_path = os.path.join(folder_path, txt_name)
     
@@ -888,12 +889,39 @@ def Output_Information(N, current_vf, df, a, b, lmin, lmax, file_suffix_range_Se
         file.write("==> {}\n".format(folder_path))
         file.write('--------------------------------------------------------------------\n')
         file.write(" Statistical analysis results have been exported to CSV files:\n")
-        file.write("   - nearest_neighbor_distances.csv: NN statistics for each configuration\n")
-        file.write("   - nn1_probability_density_config_XX.csv: 1st NN probability density for each config\n")
-        file.write("   - nn2_probability_density_config_XX.csv: 2nd NN probability density for each config\n")
-        file.write("   - ripleys_k_config_XX.csv: Ripley's K function for each configuration\n")
-        file.write("   - pair_distribution_function_config_XX.csv: PDF for each configuration\n")
-        file.write("   - statistical_summary.csv: Summary statistics\n")
+        file.write("   - RVE2D_{}Inclusions_IncCoordinatesXX.csv: fibre-centre coordinates of configuration XX\n".format(N))
+        file.write("   - nn1_probability_density_config_XX.csv: 1st nearest-neighbour distance density\n")
+        file.write("   - nn2_probability_density_config_XX.csv: 2nd nearest-neighbour distance density\n")
+        file.write("   - ripleys_k_config_XX.csv: Ripley's K function\n")
+        file.write("   - pair_distribution_function_config_XX.csv: pair distribution function g(r)\n")
+        file.write("   - nearest_neighbor_distances.csv: nearest-neighbour summary of all configurations\n")
+        if config_records:
+            write_config_check_table(file, config_records, N, target_vf, a, b)
+
+
+def write_config_check_table(file, config_records, N, target_vf, a, b):
+    """Per-configuration check: user input versus what was actually generated."""
+    file.write('--------------------------------------------------------------------\n')
+    file.write(' Per-configuration check (target vs. achieved)\n')
+    file.write('   target: {} fibres, Vf = {:.4f}%, RVE {:.6g} x {:.6g}\n'.format(
+        N, target_vf if target_vf is not None else float('nan'), a, b))
+    file.write('   {:>6s} {:>8s} {:>12s} {:>10s} {:>9s} {:>9s}\n'.format(
+        'config', 'fibres', 'Vf achieved', 'Vf diff', 're-rolls', 'time (s)'))
+    n_short = 0
+    for rec in config_records:
+        diff = rec['vf'] - target_vf if target_vf is not None else 0.0
+        flag = '' if rec['fibers'] == N else '   <-- short of N'
+        if rec['fibers'] != N:
+            n_short += 1
+        file.write('   {:>6d} {:>8d} {:>11.4f}% {:>+9.4f}% {:>9d} {:>9.2f}{}\n'.format(
+            rec['config'], rec['fibers'], rec['vf'], diff, rec['rerolls'], rec['time'], flag))
+    total_rerolls = sum(rec['rerolls'] for rec in config_records)
+    if n_short == 0:
+        file.write('   All {} configurations contain exactly {} fibres'.format(len(config_records), N))
+    else:
+        file.write('   {} of {} configurations are short of {} fibres (keep-RVE-size mode reports the achieved Vf)'.format(
+            n_short, len(config_records), N))
+    file.write(' ({} re-rolled draw(s) in total).\n'.format(total_rerolls) if total_rerolls else '.\n')
 
 # Example usage (uncomment to test):
 """

@@ -21,38 +21,4 @@ window.helpContent['pt/acknowledgements'] = `
       existiria sem ele.</li>
 </ol>
 
-<h2>Se você utilizar este trabalho em pesquisa acadêmica, por favor cite</h2>
-
-<div class="citation-card">
-  <div class="cite-title">
-    An efficient micromechanical framework for elastic and viscoelastic
-    properties prediction of unidirectional continuous fiber-reinforced
-    polymers with microvoids
-  </div>
-  <div class="cite-meta">
-    Yuhao Meng, Murilo Augusto Vaz, Marcelo Caire ·
-    <em>Composite Structures</em>, Volume 387, 2026, 120307 ·
-    ISSN 0263-8223
-  </div>
-  <p style="margin: 6px 0 0 0;">
-    <a href="https://doi.org/10.1016/j.compstruct.2026.120307" target="_blank" rel="noopener">
-      doi.org/10.1016/j.compstruct.2026.120307
-    </a>
-  </p>
-</div>
-
-<div class="citation-card">
-  <div class="cite-title">
-    Development of an ABAQUS plugin tool for periodic RVE homogenisation
-  </div>
-  <div class="cite-meta">
-    S. L. Omairey, P. D. Dunning, S. Sriramula ·
-    <em>Engineering with Computers</em>, 35 (2019) 567–577
-  </div>
-  <p style="margin: 6px 0 0 0;">
-    <a href="https://doi.org/10.1007/s00366-018-0616-4" target="_blank" rel="noopener">
-      doi.org/10.1007/s00366-018-0616-4
-    </a>
-  </p>
-</div>
 `;

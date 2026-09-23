@@ -49,12 +49,6 @@ window.helpContent['pt/tab6_analysis'] = `
     <tr><td>Number of CPUs **</td><td>1</td>
         <td>CPUs para o job Abaqus. Se exceder o disponível, todos os
         disponíveis são usados.</td></tr>
-    <tr><td>Keep all ABAQUS output files</td><td>(off)</td>
-        <td>Quando marcado, cada caso de análise grava seu ODB/CSV em uma
-        sub-pasta dedicada com nome contendo modelo, rótulo do carregamento,
-        temperatura e timestamp da execução — nada é sobrescrito. Quando
-        desmarcado, o plug-in pode reutilizar / sobrescrever ODBs para
-        poupar disco.</td></tr>
     <tr><td>UMAT Subroutine</td><td>(vazio)</td>
         <td>Opcional e disponível para <strong>todos os tipos de análise</strong>.
         Selecione um arquivo Fortran <code>.for</code> se quiser que o Abaqus
@@ -176,13 +170,11 @@ window.helpContent['pt/tab6_analysis'] = `
 
     <h4>Entradas compartilhadas (ambos os layouts)</h4>
     <ul>
-      <li><strong>Off-axis Angle (degrees, 0&ndash;90)</strong> &mdash;
-          rotaciona o referencial de carga em relação ao eixo da fibra.
-          Spinner numérico travado em <code>[0, 90]</code>.</li>
       <li><strong>Temperature Points (&deg;C)</strong> &mdash; lista
           opcional de temperaturas separadas por vírgula. Cada caso
-          uniaxial / biaxial é repetido em cada temperatura listada; as
-          saídas vão para sub-pastas por temperatura.</li>
+          uniaxial / biaxial é repetido em cada temperatura listada; todos os
+          pontos de um caso ficam na mesma sub-pasta e os nomes de job / CSV
+          levam a etiqueta de temperatura (ex.: <code>Temp_025</code>).</li>
       <li><strong>Nlgeom</strong> (large deformation) &mdash; checkbox.
           Padrão <em>ligado</em>. Desligue apenas quando tiver certeza de
           que análise de pequenas deformações é suficiente.</li>
@@ -257,13 +249,11 @@ window.helpContent['pt/tab6_analysis'] = `
 
     <h4>Entradas compartilhadas (ambos os layouts)</h4>
     <ul>
-      <li><strong>Off-axis Angle (degrees, 0&ndash;90)</strong> &mdash;
-          rotaciona o referencial de carga em relação ao eixo da fibra.
-          Spinner numérico travado em <code>[0, 90]</code>.</li>
       <li><strong>Temperature Points (&deg;C)</strong> &mdash; lista
           opcional de temperaturas separadas por vírgula. Cada caso
-          uniaxial / biaxial é repetido em cada temperatura listada; as
-          saídas vão para sub-pastas por temperatura.</li>
+          uniaxial / biaxial é repetido em cada temperatura listada; todos os
+          pontos de um caso ficam na mesma sub-pasta e os nomes de job / CSV
+          levam a etiqueta de temperatura (ex.: <code>Temp_025</code>).</li>
       <li><strong>Nlgeom</strong> (large deformation) &mdash; checkbox.
           Padrão <em>ligado</em>. Desligue apenas quando tiver certeza de
           que análise de pequenas deformações é suficiente.</li>
@@ -468,19 +458,19 @@ estes arquivos na sub-pasta do caso:</p>
   <thead><tr><th>Arquivo</th><th>Conteúdo</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>&lt;model&gt;_all_RP_history_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_all_RP_history_&lt;case&gt;.csv</code></td>
       <td>Histórico por frame e por reference point (U1/U2/U3, RF1/RF2/RF3,
       e os 6 componentes de tensão / deformação por RP).</td>
     </tr>
     <tr>
-      <td><code>&lt;model&gt;_macroscopic_stress_strain_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_macroscopic_stress_strain_&lt;case&gt;.csv</code></td>
       <td>Tensor macroscópico 6+6 por frame, mais von Mises, pressão
       hidrostática, triaxialidade, deformação volumétrica e taxa de
       deformação equivalente. Cisalhamentos como
       <code>2*Gamma_ij</code> (engineering).</td>
     </tr>
     <tr>
-      <td><code>&lt;model&gt;_true_stress_strain_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_true_stress_strain_&lt;case&gt;.csv</code></td>
       <td>Tensão Cauchy / deformação logarítmica na direção de carga ativa.
       Layout depende do tipo de carga:
         <ul>

@@ -114,17 +114,38 @@ matches one of the inputs exactly.</p>
 
 <details class="collapsible" open>
   <summary>Monte Carlo extras</summary>
-  <p><strong>Safe distance between fibers</strong> — minimum allowable
-  centre-to-centre distance for accepting a new fiber. Larger values =
-  cleaner mesh but lower achievable Vf.</p>
+  <p><strong>Safe distance between fibers</strong> — minimum
+  surface-to-surface gap between a new fiber and every existing fiber
+  (periodic images included); the centre-to-centre distance must exceed
+  <code>df + safe distance</code>. Larger values = cleaner mesh but lower
+  achievable Vf.</p>
 </details>
 
 <details class="collapsible">
   <summary>RSE extras</summary>
-  <p><strong>Lmin</strong> and <strong>Lmax</strong> — minimum and maximum
-  allowable inter-fiber distances during expansion. Required.
-  <code>Lmax ≥ Lmin &gt; 0</code>.</p>
+  <p><strong>Lmin</strong> and <strong>Lmax</strong> — each new fiber is
+  seeded at a random surface-to-surface distance in
+  <code>[Lmin, Lmax]</code> from an existing fiber. Required.
+  <code>Lmax ≥ Lmin &gt; 0</code>. Other neighbours are only required not
+  to overlap, so two fibers may end up nearly touching; to enforce a gap
+  between <em>all</em> fiber pairs set the constant <code>MIN_GAP</code>
+  (model units, about 0.03–0.05 df) at the top of
+  <code>Generate_UDFRPs_RSE.py</code>. A gap lowers the reachable Vf and,
+  in <em>keep vf</em> mode, increases the number of re-rolled draws.</p>
 </details>
+
+<div class="callout callout-note">
+  <div class="callout-title">Boundary clearance</div>
+  <p>Both generators reject a candidate fiber that covers or grazes an RVE
+  corner, and one that crosses an RVE edge (or stops short of it) by less
+  than 10% of the fiber radius. This avoids corner fibers, which the
+  geometry kernel cannot split reliably into four periodic parts, and the
+  thin slivers that make meshing fail. The excluded area is a few tenths
+  of a percent of the cross-section. The threshold is the constant
+  <code>BOUNDARY_CLEARANCE</code> at the top of the two generator files
+  (set it to 0 to disable). User coordinate files are <em>not</em>
+  filtered; see the Q&amp;A.</p>
+</div>
 
 <details class="collapsible">
   <summary>User coordinates extras</summary>
@@ -182,15 +203,19 @@ alongside the CSV coordinates:</p>
 <table>
   <thead><tr><th>File</th><th>Contents</th></tr></thead>
   <tbody>
-    <tr><td><code>first_nearest_neighbor_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>nn1_probability_density_config_&lt;ii&gt;.csv</code></td>
         <td>First nearest-neighbour distance histogram.</td></tr>
-    <tr><td><code>second_nearest_neighbor_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>nn2_probability_density_config_&lt;ii&gt;.csv</code></td>
         <td>Second nearest-neighbour distance histogram.</td></tr>
-    <tr><td><code>ripleys_K_function_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>ripleys_k_config_&lt;ii&gt;.csv</code></td>
         <td>Ripley's K function with normalized radius.</td></tr>
     <tr><td><code>pair_distribution_function_config_&lt;ii&gt;.csv</code></td>
         <td>Pair distribution function g(r) with normalized radius.</td></tr>
-    <tr><td><code>nn_summary.csv</code></td>
+    <tr><td><code>RVE2D_parameters_output_…txt</code></td>
+        <td>Summary report; it ends with a per-configuration check table
+        (fibres placed, achieved Vf, re-rolled draws, time) so that each
+        configuration can be verified against the input at a glance.</td></tr>
+    <tr><td><code>nearest_neighbor_distances.csv</code></td>
         <td>Cross-configuration summary of nearest-neighbour statistics.</td></tr>
   </tbody>
 </table>

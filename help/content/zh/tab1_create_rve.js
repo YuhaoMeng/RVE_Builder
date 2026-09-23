@@ -105,15 +105,31 @@ RVE_UDFiber_Random_Df7_Vf040_N143_Model_2
 
 <details class="collapsible" open>
   <summary>Monte Carlo 选项</summary>
-  <p><strong>Safe distance between fibers</strong> — 纤维中心之间允许的最小
-  距离。值越大，网格越干净，但能达到的 Vf 越低。</p>
+  <p><strong>Safe distance between fibers</strong> — 新纤维与所有已有纤维
+  （含周期镜像）之间允许的最小表面间隙，即圆心距必须大于
+  <code>df + safe distance</code>。值越大，网格越干净，但能达到的 Vf 越低。</p>
 </details>
 
 <details class="collapsible">
   <summary>RSE 选项</summary>
-  <p><strong>Lmin</strong> 和 <strong>Lmax</strong> — 扩展过程中纤维间距的
-  最小、最大值。<code>Lmax ≥ Lmin &gt; 0</code>。</p>
+  <p><strong>Lmin</strong> 和 <strong>Lmax</strong> — 每根新纤维以
+  <code>[Lmin, Lmax]</code> 内的随机表面间距种在某根已有纤维旁。
+  <code>Lmax ≥ Lmin &gt; 0</code>。对其余邻居只要求不重叠，因此两根纤维
+  可能几乎相切；如需对<em>所有</em>纤维对强制间隙，请修改
+  <code>Generate_UDFRPs_RSE.py</code> 顶部的常量 <code>MIN_GAP</code>
+  （模型单位，约 0.03–0.05 df）。间隙会降低可达 Vf，在 <em>keep vf</em>
+  模式下还会增加重掷次数。</p>
 </details>
+
+<div class="callout callout-note">
+  <div class="callout-title">边界余量</div>
+  <p>两种生成器都会拒绝覆盖或擦过 RVE 顶点的候选纤维，以及跨越 RVE 边
+  （或距边）不足 0.1 倍纤维半径的候选纤维。这样可以避免顶点纤维
+  （几何内核无法可靠地把它切成四块周期部分）和导致网格划分失败的薄片。
+  被排除的面积只占横截面的千分之几。阈值为两个生成器文件顶部的常量
+  <code>BOUNDARY_CLEARANCE</code>（设为 0 可关闭）。用户坐标文件
+  <em>不会</em>被过滤，见 Q&amp;A。</p>
+</div>
 
 <details class="collapsible">
   <summary>用户坐标选项</summary>
@@ -164,15 +180,18 @@ RVE_UDFiber_Random_Df7_Vf040_N143_Model_2
 <table>
   <thead><tr><th>文件</th><th>内容</th></tr></thead>
   <tbody>
-    <tr><td><code>first_nearest_neighbor_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>nn1_probability_density_config_&lt;ii&gt;.csv</code></td>
         <td>第一近邻距离直方图。</td></tr>
-    <tr><td><code>second_nearest_neighbor_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>nn2_probability_density_config_&lt;ii&gt;.csv</code></td>
         <td>第二近邻距离直方图。</td></tr>
-    <tr><td><code>ripleys_K_function_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>ripleys_k_config_&lt;ii&gt;.csv</code></td>
         <td>归一化半径下的 Ripley K 函数。</td></tr>
     <tr><td><code>pair_distribution_function_config_&lt;ii&gt;.csv</code></td>
         <td>归一化半径下的对分布函数 g(r)。</td></tr>
-    <tr><td><code>nn_summary.csv</code></td>
+    <tr><td><code>RVE2D_parameters_output_…txt</code></td>
+        <td>汇总报告；末尾附每个算例的核对表（实际纤维数、实际 Vf、重掷次数、
+        耗时），便于逐个对照输入快速核对。</td></tr>
+    <tr><td><code>nearest_neighbor_distances.csv</code></td>
         <td>跨多个配置的近邻统计汇总。</td></tr>
   </tbody>
 </table>

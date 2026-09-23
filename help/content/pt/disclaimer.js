@@ -59,6 +59,6 @@ also licensed under the GNU General Public License.
 
 <p style="text-align: right; color: var(--fg-soft);">
   <strong>Yuhao Meng</strong><br>
-  Última atualização: 2026-05
+  Última atualização: 2026-09
 </p>
 `;

@@ -35,8 +35,9 @@ window.helpContent['zh/intro'] = `
   <li>精细控制网格种子，并选择单元类型（力学、热、热-力耦合）。</li>
   <li>借助 Abaqus 的 ODB 跨模型材料复制实现批量材料分配。</li>
   <li>在基体中插入微空隙，可控制大小、分布和优先级。</li>
-  <li>6 种基于 PBC 的均质化分析（弹性 + CTE、时域粘弹性、频域粘弹性、
-      弹塑性、热导率）。</li>
+  <li>6 种基于 PBC 的均质化分析（弹性 + CTE、热导率、单轴弹塑性、双轴弹塑性、
+      时域粘弹性、频域粘弹性）；存在内聚界面时，弹塑性与热分析自动切换到
+      界面版本的求解内核。</li>
 </ul>
 
 <h2>插件结构</h2>
@@ -82,32 +83,4 @@ window.helpContent['zh/intro'] = `
   所有同主名模型，或指定的模型子集。</p>
 </div>
 
-<h2>如果你对我们的研究工作感兴趣</h2>
-
-<p>
-  下面这篇期刊论文是本插件诞生的契机。该论文中的微观力学框架正是借助本工具
-  生成的仿真数据进行验证的。
-</p>
-
-<div class="citation-card">
-  <div class="cite-title">
-    An efficient micromechanical framework for elastic and viscoelastic
-    properties prediction of unidirectional continuous fiber-reinforced
-    polymers with microvoids
-  </div>
-  <div class="cite-meta">
-    Yuhao Meng, Murilo Augusto Vaz, Marcelo Caire ·
-    <em>Composite Structures</em>, Volume 387, 2026, 120307 ·
-    ISSN 0263-8223
-  </div>
-  <p style="margin: 6px 0 0 0;">
-    <a href="https://doi.org/10.1016/j.compstruct.2026.120307" target="_blank" rel="noopener">
-      doi.org/10.1016/j.compstruct.2026.120307
-    </a>
-    &middot;
-    <a href="https://www.sciencedirect.com/science/article/pii/S0263822326002722" target="_blank" rel="noopener">
-      ScienceDirect
-    </a>
-  </p>
-</div>
 `;

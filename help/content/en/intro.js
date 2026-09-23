@@ -106,33 +106,4 @@ window.helpContent['en/intro'] = `
   model, all models with the same primary name, or a specific subset.</p>
 </div>
 
-<h2>If you are interested in our work</h2>
-
-<p>
-  Below is the journal article that motivated this plug-in. The micromechanical
-  framework presented there was validated against simulations produced with
-  this tool.
-</p>
-
-<div class="citation-card">
-  <div class="cite-title">
-    An efficient micromechanical framework for elastic and viscoelastic
-    properties prediction of unidirectional continuous fiber-reinforced
-    polymers with microvoids
-  </div>
-  <div class="cite-meta">
-    Yuhao Meng, Murilo Augusto Vaz, Marcelo Caire ·
-    <em>Composite Structures</em>, Volume 387, 2026, 120307 ·
-    ISSN 0263-8223
-  </div>
-  <p style="margin: 6px 0 0 0;">
-    <a href="https://doi.org/10.1016/j.compstruct.2026.120307" target="_blank" rel="noopener">
-      doi.org/10.1016/j.compstruct.2026.120307
-    </a>
-    &middot;
-    <a href="https://www.sciencedirect.com/science/article/pii/S0263822326002722" target="_blank" rel="noopener">
-      ScienceDirect
-    </a>
-  </p>
-</div>
 `;

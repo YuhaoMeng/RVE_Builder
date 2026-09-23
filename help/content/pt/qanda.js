@@ -9,7 +9,7 @@ window.helpContent['pt/qanda'] = `
   Esta seção apresenta os princípios de funcionamento de cada aba em
   formato de pergunta e resposta — útil para entender o que o plug-in está
   fazendo e diagnosticar comportamentos inesperados. As deduções
-  matemáticas completas estão em <em>6 · Referências</em>.
+  matemáticas completas estão em <em>5 · Referências</em>.
 </p>
 
 <h2>Create RVE</h2>
@@ -20,9 +20,12 @@ window.helpContent['pt/qanda'] = `
   <p>Monte Carlo: a cada tentativa, sorteia-se um candidato a centro dentro
   do retângulo do RVE; aceita-se se todas as fibras já presentes estão a
   pelo menos a <em>safe distance</em> de distância — caso contrário,
-  re-sorteia. RSE: as fibras são espalhadas livremente e depois uma fase
-  de "crescimento" repele / reposiciona iterativamente até que as
-  distâncias inter-fibras fiquem em <code>Lmin ≤ d ≤ Lmax</code>. Ambos
+  re-sorteia. RSE: parte de uma fibra semente e acrescenta fibras uma a
+  uma — sorteia-se uma fibra existente e coloca-se a nova a uma distância
+  superfície-a-superfície aleatória em <code>[Lmin, Lmax]</code> dela,
+  aceita se não sobrepuser nenhuma outra fibra (ou se mantiver a folga
+  opcional <code>MIN_GAP</code> de todas). O empacotamento segue até a
+  célula travar e fibras são então removidas ao acaso até o Vf alvo. Ambos
   os métodos impõem periodicidade nas quatro faces do RVE — uma fibra que
   cruza uma face é duplicada na face oposta para que a seção possa ladrilhar.</p>
 </details>
@@ -36,9 +39,12 @@ window.helpContent['pt/qanda'] = `
   faces da seção. O esboço 2D é extrudado ao longo de X para formar a Part
   3D <code>UDComposite</code>. Por fim,
   <code>part.findAt(ponto)</code> com pontos de prova cuidadosamente
-  escolhidos coleta cells, edges e faces nos Sets listados em
-  <em>3.1.8</em> — todos os Sets são construídos deterministicamente a
-  partir da geometria.</p>
+  escolhidos coleta edges e faces nos Sets listados em <em>3.1.8</em>.
+  Os Sets de cells <code>Set-Fiber</code> e <code>Set-Matrix</code> são
+  atribuídos geometricamente: um ponto interno de cada cell é testado
+  contra os círculos das fibras (imagens periódicas incluídas), de modo
+  que a atribuição não depende da ordem em que o Abaqus numera as cells
+  após o merge booleano.</p>
 </details>
 
 <details class="collapsible">
@@ -50,7 +56,42 @@ window.helpContent['pt/qanda'] = `
   registrados no arquivo <code>parameters_output</code> TXT.</p>
 </details>
 
+<details class="collapsible">
+  <summary>P. O que acontece quando uma fibra fica sobre um canto do RVE?</summary>
+  <p>Uma fibra que cobre um canto é cortada em quatro lascas, uma em cada
+  canto. Por isso os geradores Monte Carlo e RSE nunca produzem uma: um
+  candidato cujo círculo cobre ou tangencia um canto, ou que cruza uma
+  aresta do RVE (ou para antes dela) por menos de 10% do raio, é rejeitado
+  (<code>BOUNDARY_CLEARANCE</code> nos arquivos geradores). Arquivos de
+  coordenadas do usuário são usados como estão. Se uma de suas fibras
+  cobrir um canto, <code>Set-Fiber</code> / <code>Set-Matrix</code> ainda
+  são atribuídos por geometria, mas as lascas de canto são difíceis de
+  malhar e as sementes de aresta podem sair desiguais. Desloque todo o
+  padrão por um offset constante (com dobra periódica dos centros) para
+  que nenhuma fibra cubra um canto e verifique os dois Sets de cells no
+  Abaqus antes de malhar.</p>
+</details>
+
 <h2>Mesh Control</h2>
+
+<details class="collapsible">
+  <summary>P. A malha falha, ou alguns elementos são marcados como erro.
+  Por quê?</summary>
+  <p>A malha por varredura segue exatamente a partição da seção, portanto
+  a malha é tão boa quanto a geometria. Duas fibras quase encostadas
+  deixam um canal de matriz mais fino que um elemento, e uma fibra que
+  cruza uma aresta por um fio produz uma calota minúscula; ambos fazem o
+  malhador falhar ou deixam alguns elementos distorcidos. Remédios, em
+  ordem: aumente a folga mínima entre fibras (<em>Safe distance</em> no
+  Monte Carlo, a constante <code>MIN_GAP</code> em
+  <code>Generate_UDFRPs_RSE.py</code> no RSE) para que o canal mais estreito tenha
+  ao menos cerca de um elemento de largura; regenere as coordenadas, pois
+  outro sorteio costuma malhar sem problemas; aumente o número de sementes
+  na circunferência; ou mude <em>Element Shape</em> para WEDGE, que tolera
+  melhor regiões estreitas. Alguns elementos distorcidos em canais
+  estreitos têm volume desprezível e normalmente não alteram os módulos
+  homogeneizados; para estudos de dano ou de interface, regenere.</p>
+</details>
 
 <details class="collapsible">
   <summary>P. Por que o plug-in restringe os tipos de elemento?</summary>
@@ -140,8 +181,8 @@ window.helpContent['pt/qanda'] = `
 
 <details class="collapsible">
   <summary>P. O que a análise elasto-plástica realmente resolve?</summary>
-  <p>Aplica deformações macroscópicas prescritas (uniaxial ou biaxial com
-  ângulo off-axis) sob PBC e deixa o Abaqus integrar a lei constitutiva
+  <p>Aplica deformações macroscópicas prescritas (uniaxial ou biaxial,
+  ao longo dos eixos do RVE) sob PBC e deixa o Abaqus integrar a lei constitutiva
   não linear de fibra + matriz passo a passo. Se um UMAT for fornecido,
   ele assume o comportamento constitutivo da matriz; caso contrário, o
   plug-in usa o que está definido na aba Materials. O histórico de
@@ -161,6 +202,6 @@ window.helpContent['pt/qanda'] = `
   <div class="callout-title">Quer mais profundidade?</div>
   <p>Para as deduções matemáticas por trás das PBC, da geração RSE /
   Monte-Carlo de fibras e do arcabouço micromecânico Bridging / Kerner
-  do artigo de origem, veja <em>6 · Referências</em>.</p>
+  do artigo de origem, veja <em>5 · Referências</em>.</p>
 </div>
 `;

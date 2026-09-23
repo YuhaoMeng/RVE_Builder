@@ -107,21 +107,6 @@ def _pbc_reduced_coordinates(coords, axisIndex, dimension):
                 return np.array([coords[0], coords[2]], dtype=float)
         return np.array([coords[0], coords[1]], dtype=float)
 
-def _pbc_get_2d_edges(element):
-        conn = list(element.connectivity)
-        if len(conn) in (3, 6):
-                corners = conn[:3]
-                localEdges = ((0, 1), (1, 2), (2, 0))
-        else:
-                corners = conn[:4]
-                localEdges = ((0, 1), (1, 2), (2, 3), (3, 0))
-        edges = []
-        for edge in localEdges:
-                edgeLabels = []
-                for i in edge:
-                        edgeLabels.append(corners[i])
-                edges.append(tuple(edgeLabels))
-        return edges
 
 def _pbc_get_3d_faces(element):
         conn = list(element.connectivity)
@@ -160,44 +145,6 @@ def _pbc_build_connectivity_label_map(instanceObj):
                         connectivityLabelMap[node.label] = node.label
         return connectivityLabelMap
 
-def _pbc_build_master_segments(instanceObj, nodeLookup, connectivityLabelMap, axisIndex, planeValue, tol, allowedLabels=None):
-        segments = {}
-        for element in instanceObj.elements:
-                for edge in _pbc_get_2d_edges(element):
-                        labels = []
-                        missingLabel = False
-                        for connectivityLabel in edge:
-                                if connectivityLabel not in connectivityLabelMap.keys():
-                                        missingLabel = True
-                                        break
-                                labels.append(connectivityLabelMap[connectivityLabel])
-                        if missingLabel == True:
-                                continue
-                        labels = tuple(labels)
-                        if allowedLabels is not None:
-                                labelsAllowed = True
-                                for label in labels:
-                                        if label not in allowedLabels:
-                                                labelsAllowed = False
-                                                break
-                                if labelsAllowed == False:
-                                        continue
-                        coords = [nodeLookup[label].coordinates for label in labels]
-                        isOnPlane = True
-                        for coord in coords:
-                                if abs(coord[axisIndex] - planeValue) > tol:
-                                        isOnPlane = False
-                                        break
-                        if isOnPlane == True:
-                                key = tuple(sorted(labels))
-                                segments[key] = labels
-        segmentData = []
-        for labels in segments.values():
-                points = []
-                for label in labels:
-                        points.append(_pbc_reduced_coordinates(nodeLookup[label].coordinates, axisIndex, 2))
-                segmentData.append((labels, points))
-        return segmentData
 
 def _pbc_build_master_triangles(instanceObj, nodeLookup, connectivityLabelMap, axisIndex, planeValue, tol, allowedLabels=None):
         faceMap = {}
@@ -302,35 +249,6 @@ def _pbc_find_nearest_reduced_node(point, candidateLabels, nodeLookup, axisIndex
                 return [], [], bestDistance
         return [bestLabel], [1.0], bestDistance
 
-def _pbc_find_segment_interpolation(point, segments, fallbackLabels, nodeLookup, axisIndex, tol):
-        bestLabels = []
-        bestWeights = []
-        bestDistance = 1.0e+60
-        target = point[0]
-        for labels, points in segments:
-                p0 = points[0][0]
-                p1 = points[1][0]
-                delta = p1 - p0
-                if abs(delta) <= 1.0e-14:
-                        dist = abs(target - p0)
-                        if dist < bestDistance:
-                                bestDistance = dist
-                                bestLabels = [labels[0]]
-                                bestWeights = [1.0]
-                        continue
-                t = (target - p0) / delta
-                tClamp = min(max(t, 0.0), 1.0)
-                projected = p0 + tClamp * delta
-                dist = abs(target - projected)
-                if dist < bestDistance:
-                        bestDistance = dist
-                        bestLabels = [labels[0], labels[1]]
-                        bestWeights = [1.0 - tClamp, tClamp]
-                if -tol <= t <= 1.0 + tol:
-                        return [labels[0], labels[1]], [1.0 - t, t]
-        if bestLabels:
-                return bestLabels, bestWeights
-        return _pbc_inverse_distance_weights(point, fallbackLabels, nodeLookup, axisIndex, 2)
 
 def _pbc_find_triangle_interpolation(point, triangles, fallbackLabels, nodeLookup, axisIndex, tol):
         bestLabels = []
@@ -354,41 +272,7 @@ def _pbc_find_triangle_interpolation(point, triangles, fallbackLabels, nodeLooku
                 return bestLabels, bestWeights
         return _pbc_inverse_distance_weights(point, fallbackLabels, nodeLookup, axisIndex, 3)
 
-def _pbc_get_macro_terms_2d(modeName, pairAxis, component):
-        if modeName == 'elastic':
-                macroMap = {
-                        ('x', 1): [(-1.0, 'RP4', 1)],
-                        ('y', 2): [(-1.0, 'RP5', 2)],
-                }
-        else:
-                macroMap = {
-                        ('x', 1): [(-1.0, 'RP3', 1)],
-                        ('x', 2): [(-1.0, 'RP4', 2)],
-                        ('y', 1): [(-1.0, 'RP4', 1)],
-                        ('y', 2): [(-1.0, 'RP1', 2)],
-                }
-        return macroMap.get((pairAxis, component), [])
 
-def _pbc_get_macro_terms_3d(modeName, pairAxis, component):
-        if modeName == 'elastic':
-                macroMap = {
-                        ('x', 1): [(-1.0, 'RP4', 1)],
-                        ('y', 2): [(-1.0, 'RP5', 2)],
-                        ('z', 3): [(-1.0, 'RP6', 3)],
-                }
-        else:
-                macroMap = {
-                        ('x', 1): [(-1.0, 'RP3', 1)],
-                        ('x', 2): [(-1.0, 'RP4', 2)],
-                        ('x', 3): [(-1.0, 'RP5', 3)],
-                        ('y', 1): [(-1.0, 'RP4', 1)],
-                        ('y', 2): [(-1.0, 'RP1', 2)],
-                        ('y', 3): [(-1.0, 'RP6', 3)],
-                        ('z', 1): [(-1.0, 'RP5', 1)],
-                        ('z', 2): [(-1.0, 'RP6', 2)],
-                        ('z', 3): [(-1.0, 'RP2', 3)],
-                }
-        return macroMap.get((pairAxis, component), [])
 
 def _pbc_create_equation(modelObj, equationName, slaveLabel, masterLabels, weights, component, macroTerms):
         terms = [(1.0, _pbc_single_node_set_name(slaveLabel), component)]
@@ -398,162 +282,8 @@ def _pbc_create_equation(modelObj, equationName, slaveLabel, masterLabels, weigh
                 terms.append((float(coeff), setName, dof))
         modelObj.Equation(name=equationName, terms=tuple(terms))
 
-def _pbc_build_nonmatching_equations_2d(modelName, a, instanceName, nodeLookup,
-        frontbcxyz, backbcxyz, topbcxyz, botbcxyz, Max, Mny, Mnx, May, tol, modeName,
-        equationPrefix='NearestPBC', allowedLabels=None):
-        modelObj = mdb.models[modelName]
-        boundaryLabels = set(frontbcxyz.keys()) | set(backbcxyz.keys()) | set(topbcxyz.keys()) | set(botbcxyz.keys())
-        _pbc_create_single_node_sets(a, instanceName, sorted(boundaryLabels))
-        xMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(backbcxyz), allowedLabels)
-        yMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(botbcxyz), allowedLabels)
-        xSlaveLabels = _pbc_sorted_labels(frontbcxyz)
-        ySlaveLabels = []
-        for label in _pbc_sorted_labels(topbcxyz):
-                if abs(nodeLookup[label].coordinates[0] - Max) > tol:
-                        ySlaveLabels.append(label)
-        createdCount = 0
-        maxPairDistance = 0.0
-        for label in xSlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 0, 2)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, xMasterLabels, nodeLookup, 0, 2)
-                if not masterLabels:
-                        print('Warning: no nearest master node found for X edge node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                for component in (1, 2):
-                        equationName = '%s-X-U%s-%s' % (equationPrefix, component, label)
-                        _pbc_create_equation(modelObj, equationName, label, masterLabels, weights,
-                                component, _pbc_get_macro_terms_2d(modeName, 'x', component))
-                        createdCount += 1
-        for label in ySlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 1, 2)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, yMasterLabels, nodeLookup, 1, 2)
-                if not masterLabels:
-                        print('Warning: no nearest master node found for Y edge node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                for component in (1, 2):
-                        equationName = '%s-Y-U%s-%s' % (equationPrefix, component, label)
-                        _pbc_create_equation(modelObj, equationName, label, masterLabels, weights,
-                                component, _pbc_get_macro_terms_2d(modeName, 'y', component))
-                        createdCount += 1
-        print('Created %s nearest-node periodic equations for 2D %s mode. Max reduced mismatch = %s' % (createdCount, modeName, maxPairDistance))
 
-def _pbc_build_nonmatching_equations_3d(modelName, a, instanceName, nodeLookup,
-        frontbcxyz, backbcxyz, topbcxyz, botbcxyz, leftbcxyz, rightbcxyz,
-        Max, May, Mnx, Mny, Mnz, Maz, tol, modeName, equationPrefix='NearestPBC', allowedLabels=None):
-        modelObj = mdb.models[modelName]
-        boundaryLabels = set(frontbcxyz.keys()) | set(backbcxyz.keys()) | set(topbcxyz.keys()) | set(botbcxyz.keys()) | set(leftbcxyz.keys()) | set(rightbcxyz.keys())
-        _pbc_create_single_node_sets(a, instanceName, sorted(boundaryLabels))
-        xMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(backbcxyz), allowedLabels)
-        yMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(botbcxyz), allowedLabels)
-        zMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(rightbcxyz), allowedLabels)
-        xSlaveLabels = _pbc_sorted_labels(frontbcxyz)
-        ySlaveLabels = []
-        for label in _pbc_sorted_labels(topbcxyz):
-                if abs(nodeLookup[label].coordinates[0] - Max) > tol:
-                        ySlaveLabels.append(label)
-        zSlaveLabels = []
-        for label in _pbc_sorted_labels(leftbcxyz):
-                if abs(nodeLookup[label].coordinates[0] - Max) > tol and abs(nodeLookup[label].coordinates[1] - May) > tol:
-                        zSlaveLabels.append(label)
-        createdCount = 0
-        maxPairDistance = 0.0
-        for label in xSlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 0, 3)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, xMasterLabels, nodeLookup, 0, 3)
-                if not masterLabels:
-                        print('Warning: no nearest master node found for X face node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                for component in (1, 2, 3):
-                        equationName = '%s-X-U%s-%s' % (equationPrefix, component, label)
-                        _pbc_create_equation(modelObj, equationName, label, masterLabels, weights,
-                                component, _pbc_get_macro_terms_3d(modeName, 'x', component))
-                        createdCount += 1
-        for label in ySlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 1, 3)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, yMasterLabels, nodeLookup, 1, 3)
-                if not masterLabels:
-                        print('Warning: no nearest master node found for Y face node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                for component in (1, 2, 3):
-                        equationName = '%s-Y-U%s-%s' % (equationPrefix, component, label)
-                        _pbc_create_equation(modelObj, equationName, label, masterLabels, weights,
-                                component, _pbc_get_macro_terms_3d(modeName, 'y', component))
-                        createdCount += 1
-        for label in zSlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 2, 3)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, zMasterLabels, nodeLookup, 2, 3)
-                if not masterLabels:
-                        print('Warning: no nearest master node found for Z face node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                for component in (1, 2, 3):
-                        equationName = '%s-Z-U%s-%s' % (equationPrefix, component, label)
-                        _pbc_create_equation(modelObj, equationName, label, masterLabels, weights,
-                                component, _pbc_get_macro_terms_3d(modeName, 'z', component))
-                        createdCount += 1
-        print('Created %s nearest-node periodic equations for 3D %s mode. Max reduced mismatch = %s' % (createdCount, modeName, maxPairDistance))
 
-def _pbc_build_nonmatching_scalar_equations_3d(modelName, a, instanceName, nodeLookup,
-        frontbcxyz, backbcxyz, topbcxyz, botbcxyz, leftbcxyz, rightbcxyz,
-        Max, May, Mnx, Mny, Mnz, Maz, tol, macroMap, equationPrefix='NearestPBC-K',
-        component=11, allowedLabels=None):
-        modelObj = mdb.models[modelName]
-        boundaryLabels = set(frontbcxyz.keys()) | set(backbcxyz.keys()) | set(topbcxyz.keys()) | set(botbcxyz.keys()) | set(leftbcxyz.keys()) | set(rightbcxyz.keys())
-        _pbc_create_single_node_sets(a, instanceName, sorted(boundaryLabels))
-        xMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(backbcxyz), allowedLabels)
-        yMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(botbcxyz), allowedLabels)
-        zMasterLabels = _pbc_filter_allowed_labels(_pbc_sorted_labels(rightbcxyz), allowedLabels)
-        xSlaveLabels = _pbc_sorted_labels(frontbcxyz)
-        ySlaveLabels = []
-        for label in _pbc_sorted_labels(topbcxyz):
-                if abs(nodeLookup[label].coordinates[0] - Max) > tol:
-                        ySlaveLabels.append(label)
-        zSlaveLabels = []
-        for label in _pbc_sorted_labels(leftbcxyz):
-                if abs(nodeLookup[label].coordinates[0] - Max) > tol and abs(nodeLookup[label].coordinates[1] - May) > tol:
-                        zSlaveLabels.append(label)
-        createdCount = 0
-        maxPairDistance = 0.0
-        for label in xSlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 0, 3)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, xMasterLabels, nodeLookup, 0, 3)
-                if not masterLabels:
-                        print('Warning: no nearest scalar master node found for X face node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                _pbc_create_equation(modelObj, '%s-X-T-%s' % (equationPrefix, label), label, masterLabels, weights, component, macroMap.get('x', []))
-                createdCount += 1
-        for label in ySlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 1, 3)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, yMasterLabels, nodeLookup, 1, 3)
-                if not masterLabels:
-                        print('Warning: no nearest scalar master node found for Y face node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                _pbc_create_equation(modelObj, '%s-Y-T-%s' % (equationPrefix, label), label, masterLabels, weights, component, macroMap.get('y', []))
-                createdCount += 1
-        for label in zSlaveLabels:
-                point = _pbc_reduced_coordinates(nodeLookup[label].coordinates, 2, 3)
-                masterLabels, weights, pairDistance = _pbc_find_nearest_reduced_node(point, zMasterLabels, nodeLookup, 2, 3)
-                if not masterLabels:
-                        print('Warning: no nearest scalar master node found for Z face node %s.' % label)
-                        continue
-                if pairDistance > maxPairDistance:
-                        maxPairDistance = pairDistance
-                _pbc_create_equation(modelObj, '%s-Z-T-%s' % (equationPrefix, label), label, masterLabels, weights, component, macroMap.get('z', []))
-                createdCount += 1
-        print('Created %s nearest-node scalar periodic equations. Max reduced mismatch = %s' % (createdCount, maxPairDistance))
 
 
 def _elastic_node_ref(instanceName, label):
@@ -799,8 +529,53 @@ def _copy_model_for_keyword_job(baseModelName, suffix, clearPredefined=False):
         _clear_elastic_analysis_features(modelObj, clearPredefined=clearPredefined)
         return modelCopyName, modelObj, modelObj.rootAssembly
 
+_JOB_TEMP_SUFFIX = ''   # set by feasypbc from (intemp, fntemp); makes every ODB name unique per temperature
+
+def format_temperature_file_label(temperature_value):
+    """Filesystem-safe label such as Temp_025 or Temp_m050p5 (same convention as the kernel)."""
+    if temperature_value is None:
+        return ''
+    numeric_value = float(temperature_value)
+    sign_prefix = 'm' if numeric_value < 0.0 else ''
+    absolute_text = ('{:.6f}'.format(abs(numeric_value))).rstrip('0').rstrip('.')
+    if absolute_text == '':
+        absolute_text = '0'
+    if '.' in absolute_text:
+        integer_part, fractional_part = absolute_text.split('.', 1)
+        return 'Temp_{}{}p{}'.format(sign_prefix, integer_part.zfill(3), fractional_part)
+    return 'Temp_{}{}'.format(sign_prefix, absolute_text.zfill(3))
+
+def _job_temperature_suffix(intemp, fntemp=None):
+    """'_Temp_025' for a single temperature, '_Temp_025to100' for a ramp, '' if unknown.
+    Appended to job names so ODBs of different temperature points never overwrite each other."""
+    try:
+        lo = float(intemp)
+    except (TypeError, ValueError):
+        return ''
+    try:
+        hi = float(fntemp) if fntemp is not None else lo
+    except (TypeError, ValueError):
+        hi = lo
+    if abs(hi - lo) <= 1.0e-12:
+        return '_' + format_temperature_file_label(lo)
+    return '_' + format_temperature_file_label(lo) + 'to' + format_temperature_file_label(hi).replace('Temp_', '')
+
+def _delete_model_copy(model_copy_name):
+    """Delete a temporary model copy (and the job objects that point at it) once its results are read."""
+    try:
+        for job_name in list(mdb.jobs.keys()):
+            try:
+                if str(getattr(mdb.jobs[job_name], 'model', '')) == model_copy_name:
+                    del mdb.jobs[job_name]
+            except Exception:
+                pass
+        if model_copy_name in mdb.models.keys():
+            del mdb.models[model_copy_name]
+    except Exception as cleanup_error:
+        print('Warning: could not delete temporary model %s: %s' % (model_copy_name, cleanup_error))
+
 def _job_name(baseModelName, suffix):
-        return '%s-job-%s' % (baseModelName, suffix)
+        return '%s-job-%s%s' % (baseModelName, suffix, _JOB_TEMP_SUFFIX)
 
 def _submit_keyword_job(jobName, modelName, CPUs, umatName, path):
         if jobName in mdb.jobs.keys():
@@ -1058,6 +833,7 @@ def _run_cte_keyword_job(baseModelName, modelName, instanceName, upperName, path
                 writer.writerow(['Start Temperature', 'End Temperature', 'Average Temperature', 'CTE_X', 'CTE_Y', 'CTE_Z'])
                 for st, et, t, cte_x, cte_y, cte_z in zip(start_temps, end_temps, temperatures, CTE_X_list, CTE_Y_list, CTE_Z_list):
                         writer.writerow([st, et, t, cte_x, cte_y, cte_z])
+        _delete_model_copy(cteModelName)
         return CTE_X, CTE_Y, CTE_Z, odb
 
 def _write_2d_results(part, E11, E22, G12, V12, V21, mass, density, duration):
@@ -1154,8 +930,6 @@ def _run_elastic_cte_keyword_2d(part, modelName, instanceName, upperName, path, 
                 if G12_flag:
                         _append_shear_pbc_2d(eqs, instanceName, tops, bots, fronts, backs)
                 _insert_equation_keywords(modelName, eqs)
-                print('------ 2D keyword PBC equations inserted: %s ------' % len(eqs))
-                print('------ 2D keyword PBC setup duration %.3f seconds ------' % (time.time() - setupStart))
         else:
                 normalCases = []
                 if E11_flag:
@@ -1168,8 +942,6 @@ def _run_elastic_cte_keyword_2d(part, modelName, instanceName, upperName, path, 
                         normalModelName, normalModelObj, normalAssembly = _copy_model_for_keyword_job(modelName, 'E2D_KW')
                         _create_elastic_steps_and_bcs_2d(normalModelObj, normalAssembly, normalCases, Dispx, Dispy)
                         _insert_equation_keywords(normalModelName, eqs)
-                        print('------ 2D elastic keyword PBC equations inserted: %s ------' % len(eqs))
-                        print('------ 2D elastic keyword setup duration before job submit %.3f seconds ------' % (time.time() - setupStart))
                         odb, odbName = _submit_keyword_job(_job_name(modelName, 'E2D'), normalModelName, CPUs, umatName, path)
                         if E11_flag:
                                 E11, V12 = _postprocess_2d_elastic(odb, odbName, 'E11', 'E11', upperName, c1, c2, c5,
@@ -1179,20 +951,20 @@ def _run_elastic_cte_keyword_2d(part, modelName, instanceName, upperName, path, 
                                         coc1, coc2, coc5, L, H, Thikness, Dispx, Dispy)
                         odb.close()
                         odb = None
+                        _delete_model_copy(normalModelName)
                 if G12_flag:
                         eqs = []
                         _append_shear_pbc_2d(eqs, instanceName, tops, bots, fronts, backs)
                         shearModelName, shearModelObj, shearAssembly = _copy_model_for_keyword_job(modelName, 'G2D_KW')
                         _create_shear_steps_and_bcs_2d(shearModelObj, shearAssembly, ['G12'], Dispx, Dispy)
                         _insert_equation_keywords(shearModelName, eqs)
-                        print('------ 2D shear keyword PBC equations inserted: %s ------' % len(eqs))
-                        print('------ 2D shear keyword setup duration before job submit %.3f seconds ------' % (time.time() - setupStart))
                         odb, odbName = _submit_keyword_job(_job_name(modelName, 'G2D'), shearModelName, CPUs, umatName, path)
                         forceG12 = _sum_rf_from_step(odb, odbName, 'G12', 1, 'RP4')
                         stressG12 = abs(forceG12 / (L * Thikness))
                         G12 = stressG12 / ((Dispx / H) + (Dispy / L))
                         odb.close()
                         odb = None
+                        _delete_model_copy(shearModelName)
 
         density = 0
         if mass != None:
@@ -1259,8 +1031,6 @@ def _run_elastic_cte_keyword_3d(part, modelName, instanceName, upperName, path, 
                                 ftedge, btedge, bbedge, fbedge, fledge, bledge, bredge, fredge,
                                 ltedge, lbedge, rbedge, rtedge)
                 _insert_equation_keywords(modelName, eqs)
-                print('------ 3D keyword PBC equations inserted: %s ------' % len(eqs))
-                print('------ 3D keyword PBC setup duration %.3f seconds ------' % (time.time() - setupStart))
         else:
                 normalCases = []
                 if E11_flag:
@@ -1278,8 +1048,6 @@ def _run_elastic_cte_keyword_3d(part, modelName, instanceName, upperName, path, 
                         normalModelName, normalModelObj, normalAssembly = _copy_model_for_keyword_job(modelName, 'E3D_KW')
                         _create_elastic_steps_and_bcs_3d(normalModelObj, normalAssembly, normalCases, Dispx, Dispy, Dispz)
                         _insert_equation_keywords(normalModelName, eqs)
-                        print('------ 3D elastic keyword PBC equations inserted: %s ------' % len(eqs))
-                        print('------ 3D elastic keyword setup duration before job submit %.3f seconds ------' % (time.time() - setupStart))
                         odb, odbName = _submit_keyword_job(_job_name(modelName, 'E3D'), normalModelName, CPUs, umatName, path)
                         if E11_flag:
                                 E11, V12, V13 = _postprocess_3d_elastic(odb, odbName, 'E11', 'E11', upperName,
@@ -1291,6 +1059,7 @@ def _run_elastic_cte_keyword_3d(part, modelName, instanceName, upperName, path, 
                                 E33, V31, V32 = _postprocess_3d_elastic(odb, odbName, 'E33', 'E33', upperName,
                                         c1, c2, c4, c5, coc1, coc2, coc4, coc5, L, H, W, Dispx, Dispy, Dispz)
                         odb.close()
+                        _delete_model_copy(normalModelName)
                 shearCases = []
                 if G12_flag:
                         shearCases.append('G12')
@@ -1307,8 +1076,6 @@ def _run_elastic_cte_keyword_3d(part, modelName, instanceName, upperName, path, 
                         shearModelName, shearModelObj, shearAssembly = _copy_model_for_keyword_job(modelName, 'G3D_KW')
                         _create_shear_steps_and_bcs_3d(shearModelObj, shearAssembly, shearCases, Dispx, Dispy, Dispz)
                         _insert_equation_keywords(shearModelName, eqs)
-                        print('------ 3D shear keyword PBC equations inserted: %s ------' % len(eqs))
-                        print('------ 3D shear keyword setup duration before job submit %.3f seconds ------' % (time.time() - setupStart))
                         odb, odbName = _submit_keyword_job(_job_name(modelName, 'G3D'), shearModelName, CPUs, umatName, path)
                         if G12_flag:
                                 forceG12 = _sum_rf_from_step(odb, odbName, 'G12', 1, 'RP4')
@@ -1323,6 +1090,7 @@ def _run_elastic_cte_keyword_3d(part, modelName, instanceName, upperName, path, 
                                 stressG23 = abs(forceG23 / (L * H))
                                 G23 = stressG23 / ((Dispy / W) + (Dispz / H))
                         odb.close()
+                        _delete_model_copy(shearModelName)
                 if CTE_flag:
                         CTE_X, CTE_Y, CTE_Z, cteOdb = _run_cte_keyword_job(modelName, modelName, instanceName,
                                 upperName, path, CPUs, umatName, c1, c2, c4, c5, coc1, coc2, coc4, coc5,
@@ -1376,6 +1144,8 @@ def _run_elastic_cte_keyword_3d(part, modelName, instanceName, upperName, path, 
 def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CTE,CPU,onlyPBC, intemp, fntemp, segment, umatName,
         elastic_temperature_points=None):
         import os
+        global _JOB_TEMP_SUFFIX
+        _JOB_TEMP_SUFFIX = _job_temperature_suffix(intemp, fntemp)
         path = os.getcwd()
         if elastic_temperature_points is None:
                 elastic_temperature_points = []

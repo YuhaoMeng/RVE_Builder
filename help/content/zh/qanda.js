@@ -7,7 +7,7 @@ window.helpContent['zh/qanda'] = `
 
 <p>
   本节以问答形式扼要介绍每个选项卡的核心工作原理，方便理解插件背后的逻辑、
-  以及排查意料之外的行为。详细数学推导仍以 <em>6 · 参考文献</em> 中列出的
+  以及排查意料之外的行为。详细数学推导仍以 <em>5 · 参考文献</em> 中列出的
   文献为准。
 </p>
 
@@ -16,9 +16,11 @@ window.helpContent['zh/qanda'] = `
 <details class="collapsible" open>
   <summary>Q. 随机纤维圆是怎么"落"进 RVE 横截面的？</summary>
   <p>Monte Carlo：每次在 RVE 矩形内随机抽一个候选圆心，只有与所有已接受
-  纤维的距离都不小于<em>安全距离</em>时才接受，否则重抽。RSE：先把纤维
-  随机撒入，然后在"扩张"阶段反复推开 / 重排，直到纤维间距全部落入
-  <code>Lmin ≤ d ≤ Lmax</code>。两种方法都强制在 RVE 四个面上保持
+  纤维的距离都不小于<em>安全距离</em>时才接受，否则重抽。RSE：从一根种子
+  纤维出发逐根添加 —— 随机选一根已有纤维，在距其表面
+  <code>[Lmin, Lmax]</code> 内的随机位置放一根新纤维，与其余纤维不重叠
+  （或满足可选的 <code>MIN_GAP</code> 间隙）即接受；排到无法再放入后，
+  再随机移除纤维直到目标 Vf。两种方法都强制在 RVE 四个面上保持
   周期性 —— 跨越某一面的纤维会被复制到对面，使横截面可以无缝拼贴。</p>
 </details>
 
@@ -28,8 +30,10 @@ window.helpContent['zh/qanda'] = `
   插件接着<em>解析地</em>求出圆 vs 直线的交点 —— 用闭式交点（而不是
   数值挑取）来确定横截面的各条边、弧段、面。2D 草图沿 X 方向拉伸，得到
   3D 的 <code>UDComposite</code> Part。最后，<code>part.findAt(point)</code>
-  配合精心选择的探针点，把 cells / edges / faces 收集到 <em>3.1.8</em>
-  列出的命名 Set 里 —— 每个 Set 都是从几何确定式构造的，与单元下标无关。</p>
+  配合精心选择的探针点，把 edges / faces 收集到 <em>3.1.8</em>
+  列出的命名 Set 里。cell 集合 <code>Set-Fiber</code> 与 <code>Set-Matrix</code>
+  按几何判定：取每个 cell 内部一点，检验它是否落在某个纤维圆（含周期镜像）
+  内，因此不依赖布尔合并后 Abaqus 给 cell 编号的顺序。</p>
 </details>
 
 <details class="collapsible">
@@ -40,7 +44,32 @@ window.helpContent['zh/qanda'] = `
   实际值会记录在 <code>parameters_output</code> 的 TXT 文件里。</p>
 </details>
 
+<details class="collapsible">
+  <summary>Q. 纤维落在 RVE 顶点上会怎样？</summary>
+  <p>覆盖顶点的纤维会被切成四块薄片，分别位于四个顶点。因此 Monte Carlo 和
+  RSE 生成器不会生成这种纤维：圆覆盖或擦过顶点、跨越 RVE 边（或距边）不足
+  0.1 倍半径的候选都会被拒绝（生成器文件中的 <code>BOUNDARY_CLEARANCE</code>）。
+  用户坐标文件按原样使用。如果你的坐标里有纤维覆盖顶点，
+  <code>Set-Fiber</code> / <code>Set-Matrix</code> 仍按几何判定，但顶点薄片
+  很难划分网格，边上的种子也可能不均匀。建议把整组坐标平移一个常量
+  （圆心按周期回绕），使任何纤维都不覆盖顶点，并在划分网格前到 Abaqus 中
+  检查这两个 cell 集合。</p>
+</details>
+
 <h2>Mesh Control</h2>
+
+<details class="collapsible">
+  <summary>Q. 网格划分失败，或个别单元被标为 error，为什么？</summary>
+  <p>扫掠网格严格跟随横截面分块，网格质量取决于几何。两根几乎相切的纤维
+  之间的基体通道比一个单元还窄，擦边而过的纤维会留下极小的弓形薄片，
+  两者都会让网格划分失败或留下少数畸变单元。处理顺序：增大纤维最小间隙
+  （Monte Carlo 的 <em>Safe distance</em>、RSE 的
+  <code>Generate_UDFRPs_RSE.py</code> 顶部常量 <code>MIN_GAP</code>），使最窄
+  通道至少约一个单元宽；重新生成坐标，换一个随机实现往往就能正常划分；
+  增加圆周种子数；或把 <em>Element Shape</em> 改为 WEDGE，它对狭窄区域
+  更宽容。狭窄通道里的少数畸变单元体积可以忽略，通常不影响均匀化模量；
+  做损伤或界面分析时请重新生成。</p>
+</details>
 
 <details class="collapsible">
   <summary>Q. 为什么插件限制了可选的单元类型？</summary>
@@ -116,7 +145,7 @@ window.helpContent['zh/qanda'] = `
 
 <details class="collapsible">
   <summary>Q. 弹塑性分析具体在解什么？</summary>
-  <p>在 PBC 下施加用户指定的宏观应变（单轴或双轴 + off-axis 角度），
+  <p>在 PBC 下施加用户指定的宏观应变（沿 RVE 坐标轴的单轴或双轴），
   让 Abaqus 步步推进 fiber + matrix 的非线性本构。如果提供了 UMAT，那
   基体的本构就交给该子程序；否则用 Materials 选项卡里定义的材料。
   应力-应变历史以 CSV 形式导出，便于后处理。</p>
@@ -132,6 +161,6 @@ window.helpContent['zh/qanda'] = `
 <div class="callout callout-tip">
   <div class="callout-title">想要更深入？</div>
   <p>PBC 的数学推导、RSE / Monte-Carlo 纤维生成的细节，以及源论文里
-  Bridging / Kerner 微观力学框架，请见 <em>6 · 参考文献</em>。</p>
+  Bridging / Kerner 微观力学框架，请见 <em>5 · 参考文献</em>。</p>
 </div>
 `;

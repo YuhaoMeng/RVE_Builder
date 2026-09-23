@@ -31,7 +31,7 @@ window.helpContent['en/tab4_void'] = `
 This is the total void volume fraction relative to the entire RVE volume.
 The plug-in will distribute exactly this fraction across the inserted
 voids — no implicit cap is applied beyond physical feasibility (i.e., you
-cannot ask for a void Vf larger than the actual matrix volume left after
+cannot ask for a Vvoid larger than the actual matrix volume left after
 the fibers have been placed).</p>
 
 <h2>3.4.3 Void Distribution</h2>
@@ -95,7 +95,7 @@ of two categories before any void is inserted:</p>
       defaults.</li>
   <li><strong>Custom Size (theta)</strong> — type an integer
       <code>theta</code> ≥ 1. <code>theta</code> is the number of voids; the
-      single-void Vf becomes <code>total Vf / theta</code>.</li>
+      single-void volume fraction becomes <code>Vvoid / theta</code>.</li>
 </ul>
 
 <div class="callout callout-warn">
@@ -123,13 +123,24 @@ of two categories before any void is inserted:</p>
 </table>
 
 <div class="callout callout-note">
-  <div class="callout-title">Total void Vf is always honoured</div>
-  <p>Whatever you choose under Priority, the total requested void volume
-  fraction is always preserved. Only the <em>distribution shape</em> and
-  <em>per-void size</em> are negotiable.</p>
+  <div class="callout-title">Vvoid is always honoured</div>
+  <p>Whatever you choose under Priority, the requested void volume fraction
+  <code>Vvoid</code> is the one target that is never relaxed: a final
+  correction pass adds or releases boundary elements, using any void, until
+  the total is within 99%-101% of the target. Only <em>w</em> and
+  <em>theta</em> are negotiable. If even that pass cannot reach the band,
+  because the free element pool is exhausted, the summary table says so
+  instead of reporting success.</p>
 </div>
 
-<h2>3.4.6 Void Shape Factor (β)</h2>
+<h2>3.4.6 Void Shape Factor (β) — experimental</h2>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Experimental feature under development</div>
+  <p>The shape factor is a test feature. Its interface and behaviour may
+  change, and the resulting void shapes have not been validated. Leave it
+  disabled for production studies.</p>
+</div>
 
 <p>By default, voids grow with a purely distance-weighted rule that produces
 roughly spherical clusters. The optional <strong>β</strong> shape factor biases
@@ -181,7 +192,7 @@ model.</p>
   <li>Classifies every matrix element as <em>fiber-adjacent</em> or
       <em>inter-matrix</em> (see 3.4.3).</li>
   <li>Removes a number of matrix elements from the appropriate category to
-      form the voids, until the requested total void Vf is reached.</li>
+      form the voids, until the requested Vvoid is reached.</li>
   <li>Tags the deleted region with a Set named <code>Set-Void</code> so it
       can be inspected in Abaqus's Mesh module.</li>
   <li>Updates the section assignments so the void region carries no
@@ -190,10 +201,36 @@ model.</p>
       the achieved distribution matches your inputs.</li>
 </ol>
 
+<h3>What is printed in the message area</h3>
+
+<p>The message area stays short, because the numbers are written to disk
+anyway. One line is printed per model while it is processed, and one summary
+table once the batch is finished:</p>
+
+<pre>Inserting voids into 5 models; target Vvoid = 5.0000%.
+  [1/5] RVE_..._Model_1: 12 void(s), Vvoid = 5.0132%, OK (34.2 s)
+  ...
+Void insertion summary: 5 models -- 4 within tolerance, 1 relaxed, 0 not met
+Target: Vvoid = 5.0000%, theta = 12, w = 0.500
+  model             voids  Vvoid (%)    dev (%)       w  time (s)  status
+  RVE_..._Model_1      12     5.0132    +0.0132   0.502      34.2  OK
+  RVE_..._Model_3      11     5.0410    +0.0410   0.480     151.7  relaxed: theta, w</pre>
+
+<p>The <em>status</em> column is <code>OK</code> when every target was met
+within its strict tolerance, <code>relaxed: theta, w</code> when a tolerance
+had to be relaxed to converge, and a short message when a target could not be
+reached at all. A message about <code>Vvoid</code> always takes precedence,
+since that is the target the plug-in must meet. A frequent one is
+<code>w = 0.50 unreachable: every matrix element touches a fiber</code>, which
+appears at a high fiber volume fraction on a coarse mesh: there are no
+inter-matrix elements to place voids in, so w is fixed at 1 by the mesh.
+Refine the mesh or use w = 1 for such models. Per-model details stay in the
+statistics folder below.</p>
+
 <h3>Statistics folder written to disk</h3>
 
 <p>The plug-in creates one folder per run, named
-<code>Void_Statistics_&lt;model&gt;_&lt;YYYYMMDD_HHMMSS&gt;</code>, in the
+<code>Void_Statistics_&lt;model&gt;</code>, in the
 Abaqus working directory. Contents:</p>
 
 <table>
@@ -201,7 +238,7 @@ Abaqus working directory. Contents:</p>
   <tbody>
     <tr><td><code>void_summary_report.txt</code></td>
         <td>Top-level report — user inputs, RVE dimensions, target vs.
-        <strong>actual</strong> void Vf, near-fiber / inter-matrix split,
+        <strong>actual</strong> Vvoid, near-fiber / inter-matrix split,
         actual <code>w</code> value, deviation from target. <em>Open this
         first.</em></td></tr>
     <tr><td><code>void_sizes.csv</code></td>
@@ -212,9 +249,9 @@ Abaqus working directory. Contents:</p>
         cosine similarity of the principal axis <code>e1</code> to the
         global fiber X-axis.</td></tr>
     <tr><td><code>void_fiber_surface_breakdown.csv</code></td>
-        <td>Per-fiber surface destruction: fiber ID, perimeter proxy,
-        total interface-node count, broken interface-node count, and
-        ratio <code>r_i = broken / total</code>.</td></tr>
+        <td>Per-fiber surface destruction: fiber ID, number of interface
+        element faces (also used as the perimeter proxy), number of broken
+        faces, and ratio <code>r_i = broken / total</code>.</td></tr>
     <tr><td><code>void_nn_distances.csv</code></td>
         <td>First- and second-nearest-neighbour distances between voids.</td></tr>
     <tr><td><code>void_ripleys_k.csv</code></td>
@@ -230,7 +267,9 @@ Abaqus working directory. Contents:</p>
 
 <p>When fiber centres are available, <code>void_summary_report.txt</code> ends
 with five concentration indicators of how the inserted voids broke the
-fiber–matrix interface. Let <code>r_i</code> be the broken-node ratio on
+fiber–matrix interface. An interface face is an element face shared by
+a fiber element and a matrix or void element; it is broken when that
+neighbour is a void element. Let <code>r_i</code> be the broken-face ratio on
 fiber <code>i</code> and let <code>N_f</code> be the number of fibres:</p>
 
 <table class="field-table">
@@ -240,8 +279,8 @@ fiber <code>i</code> and let <code>N_f</code> be the number of fibres:</p>
         <td>Fraction of fibres with <em>any</em> destruction
             (count of <code>r_i > 0</code> divided by <code>N_f</code>).</td></tr>
     <tr><td><code>f_area</code></td>
-        <td>Overall broken-area ratio = total broken interface nodes /
-            total interface nodes summed across all fibres.</td></tr>
+        <td>Overall broken-area ratio = total broken interface faces /
+            total interface faces summed across all fibres.</td></tr>
     <tr><td><code>r_avg_broken</code></td>
         <td>Mean of <code>r_i</code> over affected fibres only.</td></tr>
     <tr><td><code>C_focus</code></td>

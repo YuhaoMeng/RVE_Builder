@@ -6,6 +6,26 @@
 # GUI (Create RVE / Mesh Control / Materials / Void / Interface / Analysis),
 # wires widgets to the keyword objects in RVE_Builder_UDFRPs_plugin, and
 # forwards the OK action to the corresponding kernel handler.
+#
+# -----------------------------------------------------------------------------
+# Part of the "RVE Builder (UDFRPs)" Abaqus/CAE plug-in.
+# Copyright (C) 2026 Yuhao Meng
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.  You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# The PBC homogenization kernels shipped with this plug-in are derived from
+# EasyPBC, Copyright (C) 2018 Sadik Lafta Omairey, distributed under the GNU
+# GPL; see the individual PBC_UDFRP_*.py files.
+# -----------------------------------------------------------------------------
 ###############################################################################
 from abaqusConstants import *
 from abaqusGui import *
@@ -494,7 +514,7 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
             # ---- Void Shape Factor (beta) ----
             # beta = 1 -> sphere (default); beta > 1 -> prolate (beta:1:1, fiber X-axis);
             # beta < 1 -> oblate (1:1:beta, compressed along Z-axis).
-            GroupBox_void_shape = FXGroupBox(p=self.TabItem_4, text='Void Shape Factor (beta)', opts=FRAME_GROOVE|LAYOUT_FILL_X)
+            GroupBox_void_shape = FXGroupBox(p=self.TabItem_4, text='Void Shape Factor (beta) - experimental feature under development', opts=FRAME_GROOVE|LAYOUT_FILL_X)
 
             # Enable / disable toggle
             HFrame_enable = FXHorizontalFrame(p=GroupBox_void_shape, opts=LAYOUT_FILL_X)
@@ -730,13 +750,6 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
             l = FXLabel(p=GroupBox_38, text='*  Mesh mapping accuracy of opposite sides should be within the above value.', opts=JUSTIFY_LEFT)
             l = FXLabel(p=GroupBox_38, text='** If number of CPUs exceeds the available, all available CPUs will be used.', opts=JUSTIFY_LEFT)
 
-            # When checked, each analysis case writes to its own sub-folder and ODBs are preserved.
-            self.keepAbaqusOutputsCheckBox = FXCheckButton(
-                p=GroupBox_38,
-                text='If checked, Keep all ABAQUS output files; otherwise ODB files will be overwritten',
-                tgt=form.keepAbaqusOutputsKw, sel=0
-            )
-
             umatFrame = FXHorizontalFrame(p=GroupBox_38, opts=LAYOUT_FILL_X)
             FXLabel(p=umatFrame, text='UMAT Subroutine Selection:', opts=JUSTIFY_LEFT)
             umatFileHandler = UMATFileHandler(form, 'umatName', 'FOR files (*.for)')
@@ -899,16 +912,12 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
             form.epBiaxialComboKw.setTarget(self)
             form.epBiaxialComboKw.setSelector(self.ID_EP_BIAXIAL_COMBO_CHANGED)
 
-            epThetaFrame = FXHorizontalFrame(p=self.paramPanelElastoplastic, opts=LAYOUT_FILL_X)
+            epTemperatureFrame = FXHorizontalFrame(p=self.paramPanelElastoplastic, opts=LAYOUT_FILL_X)
             self.epTemperaturePointsTextField = AFXTextField(
-                p=epThetaFrame, ncols=18,
+                p=epTemperatureFrame, ncols=18,
                 labelText='Temperature Points (\u00b0C):',
                 tgt=form.epTemperaturePointsKw, sel=0
             )
-            FXLabel(p=epThetaFrame, text='Off-axis Angle (degrees, 0-90):', opts=JUSTIFY_LEFT)
-            self.epThetaSpinner = AFXFloatSpinner(p=epThetaFrame, ncols=6, labelText='', tgt=form.epThetaKw, sel=0)
-            self.epThetaSpinner.setRange(0.0, 90.0)
-            self.epThetaSpinner.setIncrement(1.0)
 
             # Uniaxial 6 (checkbox + Max Strain field) pairs in two rows
             self.epSingleAxisFrame = FXVerticalFrame(p=self.paramPanelElastoplastic, opts=LAYOUT_FILL_X)
@@ -1054,7 +1063,6 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def onAlgorithmChanged(self, sender, sel, ptr, *args):
-        print("Algorithm changed to: {}".format(self.algorithmKw.getValue()))
         self.noAlgorithmSelectedFrame.hide()
         self.baseParamMonteCarloFrame.hide()
         self.baseParamRSEFrame.hide()
@@ -1165,7 +1173,7 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
         
         # Priority
         self.updatePriorityState()
-        # Refresh shape-factor widget state (Phase 4 Step 1).
+        # Refresh shape-factor widget state.
         self._updateVoidBetaWidgets()
         # Trigger Analysis-tab refresh — onAnalysisTypeChanged itself toggles UMAT availability.
         self.onAnalysisTypeChanged(None, None, None)
@@ -1653,40 +1661,14 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
         session.writeToLog('Volume Fraction: {}\n'.format(vf))
 
     def handleMeshAndInterphase(self):
-        print('Handling Mesh and Interphase')
-        partName = self.form.partNameKw.getValue()
-        meshSeedSize = self.form.mesh_seed_sizeKw.getValue()
-        print('Part Name:', partName)
-        print('Mesh Seed Size:', meshSeedSize)
+        pass
 
     def handleEditMaterials(self):
-        print('Handling Edit Materials')
-        fiberMaterial = self.form.fiber_materialKw.getValue()
-        matrixMaterial = self.form.matrix_materialKw.getValue()
-        model_range_option = self.form.Model_range_materialKw.getValue()
-        user_input = self.form.user_inputKw.getValue()
-        
-        if model_range_option == 1:
-            print('Applying materials to the current model.')
-        elif model_range_option == 2:
-            print('Applying materials to all models with the same primary name.')
-        elif model_range_option == 3:
-            print('Applying materials to models: {}'.format(user_input))
-    
-        def handleVoidInsertion(self):
-            model_for_void = self.form.model_for_voidKw.getValue()
-            part_for_void = self.form.part_for_voidKw.getValue()
-            target_vf_void = self.form.target_vf_voidKw.getValue()
-            Model_range_void = self.form.Model_range_voidKw.getValue()
-            user_input_void = self.form.user_input_voidKw.getValue()
-            
-            if not model_for_void or not part_for_void or target_vf_void is None or Model_range_void is None:
-                FXMessageBox.warning(self, MBOX_OK, 'Input Error', 'Please fill in all required fields.')
-                return
-            
-            target_vf_void /= 100.0
-            Void(model_for_void, part_for_void, target_vf_void, Model_range_void, user_input=user_input_void)
-    
+        pass
+
+    def handleVoidInsertion(self):
+        pass
+
     def handleInterface(self):
         # Implement the function to handle the 'Interface' tab actions
         modelName = self.form.model_for_interfaceKw.getValue()
@@ -1705,7 +1687,6 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
             session.writeToLog('Applying interface to models: {}\n'.format(user_input))
     
     def handleAnalysis(self):
-        print('Handling Analysis')
         analysisModelName = self.form.model_for_analysisKw.getValue()
         analysisPartName = self.form.part_for_analysisKw.getValue()
         
@@ -1713,23 +1694,7 @@ class RVE_Builder_UDFRPsDB(AFXDataDialog):
         time_point = self.form.time_pointKw.getValue()
         
         umatName = self.form.umatNameKw.getValue()
-        
-        print('Analysis Model Name:', analysisModelName)
-        print('Analysis Part Name:', analysisPartName)
-        print('UMAT Subroutine File:', umatName)
-        
         analysisType = self.form.analysisTypeKw.getValue()
-        print('Analysis Type:', analysisType)
-        if analysisType == 2:
-            print('Temperature Points:', self.form.visco_temperature_pointsKw.getValue())
-            print('Relaxation Total Time:', self.form.relaxationTimeKw.getValue())
-            print('Number of Time Points:', self.form.time_pointKw.getValue())
-        elif analysisType == 3:
-            print('Temperature Points:', self.form.visco_temperature_pointsKw.getValue())
-            print('Lower Frequency:', self.form.lowerFreqKw.getValue())
-            print('Upper Frequency:', self.form.upperFreqKw.getValue())
-            print('Number of Points:', self.form.numPointsKw.getValue())
-            print('Bias:', self.form.biasKw.getValue())
         
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def onCmdClicked(self, sender, sel, ptr):

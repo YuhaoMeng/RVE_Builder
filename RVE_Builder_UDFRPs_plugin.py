@@ -6,6 +6,26 @@
 # Defines AFXForm with all keywords (one cmd per tab) and binds the dialog
 # class from RVE_Builder_UDFRPsDB. Kernel side is implemented in
 # RVE_Builder_UDFRPs.py (imported via kernelInitString).
+#
+# -----------------------------------------------------------------------------
+# Part of the "RVE Builder (UDFRPs)" Abaqus/CAE plug-in.
+# Copyright (C) 2026 Yuhao Meng
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.  You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# The PBC homogenization kernels shipped with this plug-in are derived from
+# EasyPBC, Copyright (C) 2018 Sadik Lafta Omairey, distributed under the GNU
+# GPL; see the individual PBC_UDFRP_*.py files.
+# -----------------------------------------------------------------------------
 ###############################################################################
 
 from abaqusGui import *
@@ -52,7 +72,10 @@ class RVE_Builder_UDFRPs_plugin(AFXForm):
         self.lminKw = AFXFloatKeyword(self.cmd_tab1, 'lmin', True, 0.1)
         self.lmaxKw = AFXFloatKeyword(self.cmd_tab1, 'lmax', True, 1)
         self.readcsvKw = AFXStringKeyword(self.cmd_tab1, 'readcsv', True, '')
-        self.BasefolderKw = AFXStringKeyword(self.cmd_tab1, 'Basefolder', True, 'C:/UDFiber RVE Builder')
+        # Default save folder: filled with the Abaqus work directory when the
+        # dialog opens (see getFirstDialog); the plug-in is registered before the
+        # work directory is known.
+        self.BasefolderKw = AFXStringKeyword(self.cmd_tab1, 'Basefolder', True, '')
 
         # Keywords for the second tab (Mesh Control)
         self.modelNameKw = AFXStringKeyword(self.cmd_tab2, 'modelName', True)
@@ -93,7 +116,7 @@ class RVE_Builder_UDFRPs_plugin(AFXForm):
         self.void_theta_valueKw = AFXIntKeyword(self.cmd_tab4, 'void_theta_value', True, 5)
         self.void_priorityKw = AFXIntKeyword(self.cmd_tab4, 'void_priority', True, 3)
 
-        # ---- Void shape factor β (Phase 4 Step 1) ----
+        # ---- Void shape factor β ----
         # When voidBetaActive is False, β is ignored and voids grow with the legacy
         # distance-weighted rule. When True, the candidate weighting is biased by
         # an ellipsoid envelope of axes proportional to (β, 1, 1) for β > 1
@@ -199,14 +222,10 @@ class RVE_Builder_UDFRPs_plugin(AFXForm):
         self.epShearXYKw  = AFXFloatKeyword(self.cmd_tab6, 'epShearXY',  True, 0.0)
         self.epShearYZKw  = AFXFloatKeyword(self.cmd_tab6, 'epShearYZ',  True, 0.0)
         self.epShearZXKw  = AFXFloatKeyword(self.cmd_tab6, 'epShearZX',  True, 0.0)
-        self.epThetaKw    = AFXFloatKeyword(self.cmd_tab6, 'epTheta',    True, 0.0)
 
         # ----- New (multi-temperature + safer outputs + EP uniaxial/biaxial) -----
         # Comma-separated Celsius list for the elastic temperature sweep.
         self.elastic_temperature_pointsKw = AFXStringKeyword(self.cmd_tab6, 'elastic_temperature_points', True, '25,50,75,100')
-        # If checked, keep every ODB/CSV in a per-case sub-folder; otherwise the kernel
-        # is free to overwrite intermediate ODBs.
-        self.keepAbaqusOutputsKw = AFXBoolKeyword(self.cmd_tab6, 'keepAbaqusOutputs', AFXBoolKeyword.TRUE_FALSE, True, False)
         # Uniaxial vs Biaxial is now encoded by the Analysis-type radio
         # (4 = Elastoplastic Uniaxial, 6 = Elastoplastic Biaxial), so the old
         # epLoadingMode keyword has been retired -- the dispatcher reads
@@ -236,6 +255,15 @@ class RVE_Builder_UDFRPs_plugin(AFXForm):
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def getFirstDialog(self):
+
+        # Default save folder: the current Abaqus work directory (File ->
+        # Set Work Directory), unless the user already typed a folder.
+        if not self.BasefolderKw.getValue():
+            try:
+                work_dir = getAFXApp().getAFXMainWindow().getWorkDirectory()
+            except Exception:
+                work_dir = os.getcwd()
+            self.BasefolderKw.setValue(work_dir.replace('\\', '/'))
 
         # Open the dialog window (defined in RVE_Builder_UDFRPsDB)
         import RVE_Builder_UDFRPsDB
@@ -271,7 +299,6 @@ class RVE_Builder_UDFRPs_plugin(AFXForm):
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Registration Plugin
-#
 thisPath = os.path.abspath(__file__)
 thisDir = os.path.dirname(thisPath)
 # Local HTML help manual shipped with the plugin (open in default browser).
@@ -295,7 +322,7 @@ toolset.registerGuiMenuButton(
     icon=pluginIcon,
     kernelInitString='import RVE_Builder_UDFRPs',
     applicableModules=ALL,
-    version='N/A',
+    version='1.0',
     author='Yuhao Meng',
     description='3D UD Fiber RVE Builder (UDFRPs) - see Help for details.',
     helpUrl=helpUrl

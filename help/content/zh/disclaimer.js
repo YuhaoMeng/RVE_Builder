@@ -53,6 +53,6 @@ also licensed under the GNU General Public License.
 
 <p style="text-align: right; color: var(--fg-soft);">
   <strong>孟禹豪</strong><br>
-  最后更新：2026-05
+  最后更新：2026-09
 </p>
 `;

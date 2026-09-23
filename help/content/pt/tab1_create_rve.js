@@ -116,17 +116,38 @@ corresponda exatamente a uma das entradas.</p>
 
 <details class="collapsible" open>
   <summary>Monte Carlo — extras</summary>
-  <p><strong>Safe distance between fibers</strong> — distância
-  centro-a-centro mínima permitida ao aceitar uma nova fibra. Valores
-  maiores → malha mais limpa, mas Vf máximo menor.</p>
+  <p><strong>Safe distance between fibers</strong> — folga mínima
+  superfície-a-superfície entre uma nova fibra e todas as já existentes
+  (imagens periódicas incluídas); a distância centro-a-centro deve exceder
+  <code>df + safe distance</code>. Valores maiores → malha mais limpa, mas
+  Vf máximo menor.</p>
 </details>
 
 <details class="collapsible">
   <summary>RSE — extras</summary>
-  <p><strong>Lmin</strong> e <strong>Lmax</strong> — distâncias inter-fibras
-  mínima e máxima permitidas durante a expansão. Obrigatórios.
-  <code>Lmax ≥ Lmin &gt; 0</code>.</p>
+  <p><strong>Lmin</strong> e <strong>Lmax</strong> — cada nova fibra é
+  semeada a uma distância superfície-a-superfície aleatória em
+  <code>[Lmin, Lmax]</code> de uma fibra existente. Obrigatórios.
+  <code>Lmax ≥ Lmin &gt; 0</code>. Das demais vizinhas exige-se apenas que
+  não haja sobreposição, portanto duas fibras podem ficar quase encostadas;
+  para impor uma folga entre <em>todos</em> os pares, ajuste a constante
+  <code>MIN_GAP</code> (unidades do modelo, cerca de 0,03–0,05 df) no topo
+  de <code>Generate_UDFRPs_RSE.py</code>. Uma folga reduz o Vf alcançável
+  e, no modo <em>keep vf</em>, aumenta o número de sorteios refeitos.</p>
 </details>
+
+<div class="callout callout-note">
+  <div class="callout-title">Folga de contorno</div>
+  <p>Ambos os geradores rejeitam uma fibra candidata que cubra ou tangencie
+  um canto do RVE, e uma que cruze uma aresta do RVE (ou pare antes dela)
+  por menos de 10% do raio da fibra. Isso evita fibras de canto, que o
+  núcleo geométrico não consegue dividir com segurança em quatro partes
+  periódicas, e as lascas finas que fazem a malha falhar. A área excluída
+  é de alguns décimos de percento da seção. O limiar é a constante
+  <code>BOUNDARY_CLEARANCE</code> no topo dos dois arquivos geradores
+  (0 desativa). Arquivos de coordenadas do usuário <em>não</em> são
+  filtrados; veja o Q&amp;A.</p>
+</div>
 
 <details class="collapsible">
   <summary>Coordenadas do usuário — extras</summary>
@@ -197,15 +218,19 @@ configuração, ao lado dos CSVs de coordenadas:</p>
 <table>
   <thead><tr><th>Arquivo</th><th>Conteúdo</th></tr></thead>
   <tbody>
-    <tr><td><code>first_nearest_neighbor_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>nn1_probability_density_config_&lt;ii&gt;.csv</code></td>
         <td>Histograma da distância ao primeiro vizinho mais próximo.</td></tr>
-    <tr><td><code>second_nearest_neighbor_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>nn2_probability_density_config_&lt;ii&gt;.csv</code></td>
         <td>Histograma da distância ao segundo vizinho mais próximo.</td></tr>
-    <tr><td><code>ripleys_K_function_config_&lt;ii&gt;.csv</code></td>
+    <tr><td><code>ripleys_k_config_&lt;ii&gt;.csv</code></td>
         <td>Função K de Ripley com raio normalizado.</td></tr>
     <tr><td><code>pair_distribution_function_config_&lt;ii&gt;.csv</code></td>
         <td>Função de distribuição de pares g(r) com raio normalizado.</td></tr>
-    <tr><td><code>nn_summary.csv</code></td>
+    <tr><td><code>RVE2D_parameters_output_…txt</code></td>
+        <td>Relatório-resumo; termina com uma tabela de verificação por
+        configuração (fibras colocadas, Vf obtido, sorteios refeitos, tempo)
+        para conferir cada configuração contra a entrada de relance.</td></tr>
+    <tr><td><code>nearest_neighbor_distances.csv</code></td>
         <td>Resumo das estatísticas de vizinhança entre configurações.</td></tr>
   </tbody>
 </table>

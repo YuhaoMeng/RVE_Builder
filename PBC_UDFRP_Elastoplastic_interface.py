@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 ###############################################################################
-# PBC_UDFRP_Elastoplastic.py
+# PBC_UDFRP_Elastoplastic_interface.py
 # -----------------------------------------------------------------------------
 # Elastoplastic homogenization of a UDFRP RVE under PBC.
 # - Uniaxial: applies any subset of {Strain11, Strain22, Strain33, Shear12,
@@ -21,11 +21,40 @@
 # - Optional UMAT is honoured when supplied; left empty otherwise.
 # - Called from RVE_Builder_UDFRPs.Analysis when analysis_type == 4.
 # Author: Yuhao Meng
+#
+# -----------------------------------------------------------------------------
+# Based on EasyPBC Ver. 1.4 (08/10/2018, updated 27/08/2019).
+# Adapted for the "RVE Builder (UDFRPs)" Abaqus plug-in.
+# Modifications Copyright (C) 2026 Yuhao Meng.
+#
+# From EasyPBC:
+#      EasyPBC is an ABAQUS CAE plugin developed to estimate the homogenised
+#      effective elastic properties of user-defined representative volume
+#      elements.
+#      Copyright (C) 2018  Sadik Lafta Omairey
+#
+#      This program is free software: you can redistribute it and/or modify
+#      it under the terms of the GNU General Public License as published by
+#      the Free Software Foundation, either version 3 of the License, or
+#      (at your option) any later version.
+#
+#      This program is distributed in the hope that it will be useful,
+#      but WITHOUT ANY WARRANTY; without even the implied warranty of
+#      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#      GNU General Public License for more details.
+#
+#      You should have received a copy of the GNU General Public License
+#      along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#      Citation: Omairey S, Dunning P, Sriramula S (2018) Development of an
+#      ABAQUS plugin tool for periodic RVE homogenisation.
+#      Engineering with Computers. https://doi.org/10.1007/s00366-018-0616-4
+# -----------------------------------------------------------------------------
 ###############################################################################
 """
 Complete RVE Multi-axial Analysis Code
 Apply specified macroscopic strains, perform analysis, extract and save results to CSV files
-Supports single-axis, bi-axial, and full multi-axial loading with off-axis angles
+Supports single-axis, bi-axial, and full multi-axial loading along the RVE axes
 Author: Yuhao Meng
 """
 from abaqus import *
@@ -596,7 +625,7 @@ def ensure_material_density(model, default_density=QUASI_STATIC_DEFAULT_DENSITY,
 
 
 def extract_energy_history(odb, step_name, output_dir, output_model_name,
-                           theta_deg=0.0, loading_label='', verbose=True):
+                           loading_label='', verbose=True):
     """Extract whole-model energy history and write an energy-verification CSV.
 
     Reads ALLIE / ALLSE / ALLPD / ALLDMD / ALLSD / ALLVD / ALLKE / ALLWK from the
@@ -662,8 +691,8 @@ def extract_energy_history(odb, step_name, output_dir, output_model_name,
                       'ALLSD', 'ALLVD', 'ALLKE', 'ALLWK',
                       'Stab_Visc_Ratio', 'KE_Ratio', 'Energy_OK']
         filename = os.path.join(output_dir,
-            '{}_energy_check_{}_theta{:.0f}deg.csv'.format(
-                output_model_name, loading_label, theta_deg))
+            '{}_energy_check_{}.csv'.format(
+                output_model_name, loading_label))
         csvfile, writer = create_csv_writer(filename, fieldnames)
         if not writer:
             return None
@@ -917,7 +946,6 @@ def extract_reference_point_results(odb, step_name, frame_number=None, rve_dimen
                 return []
             # use the first available step
             step_name = available_steps[0]
-            print("Using step: {}".format(step_name))
         
         step = odb.steps[step_name]
         
@@ -926,7 +954,6 @@ def extract_reference_point_results(odb, step_name, frame_number=None, rve_dimen
             print("WARNING: No frames available in step '{}'".format(step_name))
             return []
         
-        print("Step '{}' contains {} frames".format(step_name, len(step.frames)))
         
         L = rve_dimensions['L']
         H = rve_dimensions['H']
@@ -958,7 +985,6 @@ def extract_reference_point_results(odb, step_name, frame_number=None, rve_dimen
                 rp_set = odb.rootAssembly.nodeSets[rp_name]
                 active_reference_points.append((rp_name, rp_set))
         
-        print("Active reference points: {}".format([rp[0] for rp in active_reference_points]))
         
         # extract data for each frame
         for frame_idx, frame in zip(frame_indices, frames_to_process):
@@ -1064,7 +1090,6 @@ def extract_reference_point_results(odb, step_name, frame_number=None, rve_dimen
                 print("WARNING: Error processing frame {}: {}".format(frame_idx, str(e)))
                 continue
         
-        print("Successfully extracted data from {} frames".format(len(set([r['Frame'] for r in rp_results]))))
         return rp_results
         
     except Exception as e:
@@ -1081,7 +1106,7 @@ def extract_reference_point_time_history(odb, step_name, rve_dimensions=None):
     return extract_reference_point_results(odb, step_name, frame_number=None, rve_dimensions=rve_dimensions)
 
 
-def save_reference_point_time_history(rp_results, output_dir, modelName, applied_strains=None, theta_deg=0, loading_label='Analysis'):
+def save_reference_point_time_history(rp_results, output_dir, modelName, applied_strains=None, loading_label='Analysis'):
     import os
     saved_files = []
     # Group data by reference point
@@ -1098,8 +1123,8 @@ def save_reference_point_time_history(rp_results, output_dir, modelName, applied
                           'Shear_Stress_12', 'Shear_Strain_12', 'Shear_Stress_13', 'Shear_Strain_13',
                           'Shear_Stress_23', 'Shear_Strain_23']  # Removed individual Mises values
     
-    combined_filename = os.path.join(output_dir, '{}_all_RP_history_{}_theta{:.0f}deg.csv'.format(
-        modelName, sanitize_loading_label(loading_label), theta_deg))
+    combined_filename = os.path.join(output_dir, '{}_all_RP_history_{}.csv'.format(
+        modelName, sanitize_loading_label(loading_label)))
     csvfile, writer = create_csv_writer(combined_filename, combined_fieldnames)
     if writer:
         for result in rp_results:
@@ -1115,8 +1140,8 @@ def save_reference_point_time_history(rp_results, output_dir, modelName, applied
     
     if macroscopic_data:
         # Save macroscopic stress-strain file
-        macro_filename = os.path.join(output_dir, '{}_macroscopic_stress_strain_{}_theta{:.0f}deg.csv'.format(
-            modelName, sanitize_loading_label(loading_label), theta_deg))
+        macro_filename = os.path.join(output_dir, '{}_macroscopic_stress_strain_{}.csv'.format(
+            modelName, sanitize_loading_label(loading_label)))
         macro_fieldnames = ['Frame', 'Time', 'Increment',
                            'Sigma_11', 'Sigma_22', 'Sigma_33', 'Tau_12', 'Tau_13', 'Tau_23',
                            'Epsilon_11', 'Epsilon_22', 'Epsilon_33', '2*Gamma_12', '2*Gamma_13', '2*Gamma_23',
@@ -1186,7 +1211,6 @@ def save_reference_point_time_history(rp_results, output_dir, modelName, applied
 
 def extract_element_results(odb, step_name, frame_number, instance_name):
     """Extract element stress, strain, and Mises stress results"""
-    print("Extracting element results...")
     
     element_results = []
     
@@ -1339,7 +1363,6 @@ def extract_element_results(odb, step_name, frame_number, instance_name):
                     result_dict['STATUS'] = status_value.data if status_value else 0.0
                 else:
                     result_dict['STATUS'] = 0.0
-        print("Successfully extracted {} element results".format(len(element_results)))
         return element_results
         
     except Exception as e:
@@ -1443,7 +1466,6 @@ def calculate_macroscopic_stress_strain(rp_results):
 
 def calculate_volume_averages(element_results):
     """Calculate volume-averaged stress and strain values"""
-    print("Calculating volume averages...")
     
     if not element_results:
         return {}
@@ -1476,7 +1498,6 @@ def calculate_volume_averages(element_results):
         volume_averages.update(avg_strain)
         volume_averages['MISES_avg'] = avg_mises
         
-        print("Volume averages calculated successfully")
         return volume_averages
         
     except Exception as e:
@@ -1484,10 +1505,9 @@ def calculate_volume_averages(element_results):
         return {}
 
 # ----------------------------------------------------------------------------
-# NOTE: curve FITTING has been split OUT of this plugin.  The plugin only writes
-# the raw concentration_history CSV + summary (data output).  The UMAT card
-# (PROPS 40-54) is fitted from that CSV by the standalone, modular fitter:
-#     D:\Desktop\SCI_3\program\fit_UMAT_curves.py
+# Curve fitting is not part of this plugin.  The functions below only write the
+# concentration_history CSV and its summary; UMAT parameters are fitted from
+# that CSV by an external script.
 # ----------------------------------------------------------------------------
 
 
@@ -1527,7 +1547,7 @@ def _wquantile(pairs, q):
 
 def extract_concentration_factors(odb, step_name, instance_name, rp_history,
                                   output_dir, output_model_name,
-                                  loading_label='Analysis', theta_deg=0,
+                                  loading_label='Analysis',
                                   matrix_set='Set-Matrix'):
     """Physically-sourced stress-concentration factors for the bridging+SCF
     UMAT -- read directly from the RVE field so SCFt / yield-concentration come
@@ -1544,7 +1564,6 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
     damage/debond onset (max interface traction CSTRESS if present, else macro-
     stress peak -> SCFt).  These numbers feed the UMAT card directly.
     """
-    print("Extracting physical stress-concentration factors (matrix '%s')..." % matrix_set)
     try:
         step = odb.steps[step_name]
         instance = odb.rootAssembly.instances[instance_name]
@@ -1623,8 +1642,6 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
         mreg, mreg_name = instance, '<whole-instance>'
     if has_void:
         print("  concentration: VOID model -> SCF over SOLID matrix '%s' (voids excluded)." % mreg_name)
-    else:
-        print("  concentration: matrix region '%s'." % mreg_name)
 
     # cohesive INTERFACE element set.  With cohesive ELEMENTS (COH3D8) the
     # interface normal traction is the element stress S (S33 ~ normal), NOT the
@@ -1661,7 +1678,6 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
                 break
         except Exception:
             void_vf = 0.0
-        print("  concentration: matrix porosity void/(void+solid) = %.4f" % void_vf)
 
     macro = calculate_macroscopic_stress_strain(rp_history) if rp_history else []
     macro_by_frame = {}
@@ -1691,7 +1707,7 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
         s_pk = [-1.0e30, -1.0e30, -1.0e30]
         mis_sum = 0.0
         mis_pk = 0.0
-        mis_sq_sum = 0.0          # rev.20 Route A: IVOL-weighted Mises^2 (second moment)
+        mis_sq_sum = 0.0          # IVOL-weighted Mises^2 (second moment)
         vm_pairs = []             # (Mises, IVOL weight) for the volume-weighted quantile
         for sv in Ssub.values:
             d = sv.data
@@ -1720,19 +1736,14 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
         for k in range(3):
             s_avg[k] /= sumw
         mis_avg = mis_sum / sumw
-        # rev.20 Route A (XKYLD, principled): volume-weighted high quantile of the
-        # matrix Mises field.  Yield onset is LOCAL-driven so the mean field (and
-        # the mild 2nd-moment ratio ~1.05) underestimate it; the single max
-        # (k_yield ~5.7) is singularity-/mesh-dominated.  The P90-P95 band is the
-        # representative stress of the most-loaded 5-10% of matrix VOLUME -- the
-        # part that yields first and drives the macro knee -- and is mesh-robust.
+        # Volume-weighted high quantiles of the matrix Mises field: the mean
+        # field underestimates the local yield onset and the single maximum is
+        # mesh-dominated, so the P90-P95 band (the most-loaded 5-10% of the
+        # matrix volume) is used as the mesh-robust yield-onset measure.
         mis_q90 = _wquantile(vm_pairs, 0.90)
         mis_q95 = _wquantile(vm_pairs, 0.95)
-        # rev.20 Route A: second-moment (RMS) of matrix Mises.  The Doghri/MFH
-        # intra-phase stress heterogeneity ratio  sqrt(<Mises^2>)/<Mises>  is the
-        # physically correct YIELD-onset amplifier (~1.1-1.3), replacing the
-        # geometric peak/avg ratio (k_yield ~5.7) that yields the element far too
-        # early.  DATA OUTPUT ONLY here; fit_UMAT_curves.py consumes the column.
+        # Second moment (RMS) of the matrix Mises stress: the Doghri/MFH
+        # intra-phase heterogeneity ratio sqrt(<Mises^2>)/<Mises>.
         mis_2m = (mis_sq_sum / sumw) ** 0.5
 
         peeq_pk = 0.0
@@ -1744,23 +1755,16 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
             except Exception:
                 pass
 
-        # interface normal traction:
-        #  cohesive ELEMENTS -> peak direct stress S over the interface set
-        #    (in-plane components ~0 for traction-separation, so max of the 3
-        #     direct components robustly picks the normal traction regardless
-        #     of which local axis Abaqus assigned to S33);
+        # Interface normal traction:
+        #  cohesive ELEMENTS -> direct stress S over the interface set (the
+        #    in-plane components are ~0 for traction-separation, so the max of
+        #    the three direct components picks the normal traction regardless
+        #    of which local axis Abaqus assigned to S33);
         #  cohesive CONTACT  -> fall back to CSTRESS.
-        # rev.20 XKINT Route A: interface normal traction.
-        #   tn_pk  = MAX direct stress over the interface set (geometric hot spot),
-        #            kept for reference / back-compat.
-        #   tn_avg = IVOL(area)-weighted AVERAGE interface normal traction.  The
-        #            cohesive layer has the SAME peak/avg heterogeneity disease as
-        #            k_yield: the MAX iface Tn reaches TN0=50 at a single hot spot
-        #            ~eps 0.0018, firing whole-element debond far too early (run 74:
-        #            collapse @ eps~0.0017).  The AREA-AVERAGED traction is the
-        #            physically correct whole-element debond driver, so XKINT is
-        #            built from tn_avg (mirrors the XKYLD second-moment fix).
-        #            Only tensile (cand > 0) contributions are accumulated.
+        #   tn_pk  = maximum over the interface set (geometric hot spot)
+        #   tn_avg = IVOL(area)-weighted average of the tensile traction; the
+        #            area-averaged value is the whole-element debond driver
+        #            from which XKINT is built.
         tn_pk = 0.0
         tn_sum = 0.0          # IVOL-weighted sum of tensile interface traction
         tn_w = 0.0            # accumulated IVOL weight
@@ -1860,8 +1864,7 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
         r['SCFt'] = _safe(r[pk_key], r[avg_key])
         r['SCFt_tot'] = _safe(r[pk_key], r[mac_key])
         r['k_yield'] = _safe(r['Mtx_Mises_pk'], r['Mtx_Mises_avg'])
-        # rev.20 Route A: second-moment yield amplifier  sqrt(<Mises^2>)/<Mises>.
-        # Kept for reference (it is too diluted: ~1.05).
+        # second-moment yield amplifier sqrt(<Mises^2>)/<Mises>
         r['XKYLD_2m'] = _safe(r['Mtx_Mises_2m'], r['Mtx_Mises_avg'])
         # principled YIELD driver: volume-weighted P90 / P95 of matrix Mises over
         # matrix-avg Mises.  Field-derived (no macro-curve peeking); the fitter
@@ -1869,11 +1872,8 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
         # against the RVE yield-onset timing rather than the macro curve.
         r['XKYLD_q90'] = _safe(r['Mtx_Mises_q90'], r['Mtx_Mises_avg'])
         r['XKYLD_q95'] = _safe(r['Mtx_Mises_q95'], r['Mtx_Mises_avg'])
-        # rev.20 Route A (XKINT): interface-AVERAGE debond amplifier
-        # <Tn_iface> / <sigma_m_transverse>.  Replaces the max(Tn)/avg ratio,
-        # which fired at a single geometric hot spot (~eps 0.0018) and caused
-        # premature brittle whole-element debond.  k_int (peak-based) kept above
-        # for reference; the fitter prefers XKINT_avg for the debond driver.
+        # interface-average debond amplifier <Tn_iface> / <sigma_m_transverse>
+        # (k_int above is the peak-based counterpart)
         r['XKINT_avg'] = _safe(r['Iface_Tn_avg'], r[avg_key])
 
     eps_key = 'Macro_E' + Lname
@@ -1883,7 +1883,7 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
             idx_yield = i
             break
 
-    # rev.20 Route A: RVE-pinned yield-knee strain eps_y = first frame where the
+    # RVE-pinned yield-knee strain eps_y = first frame where the
     # matrix AVERAGE Mises reaches the matrix Hill tensile-yield onset s0t.  This
     # is the strain at which the mean field (not the geometric hot spot) yields --
     # the correct knee to pin XKYLD's elastic->evolution transition.
@@ -1939,7 +1939,7 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
     _S0T = 36.6932    # matrix Hill tensile yield onset (card const 21)
     _SFT = 93.0       # matrix tensile strength sigma_ft (card const 10)
     k_int_eff = (_TN0 / rd[avg_key]) if abs(rd[avg_key]) > 1.0e-12 else 0.0
-    # rev.20 Route A (XKINT): pin the debond eps_y to the MACRO stress peak strain
+    # pin the debond eps_y to the MACRO stress peak strain
     # of the with-CZM (red) curve -- the strain at which the homogenized composite
     # actually loses load-carrying capacity -- rather than to the geometric-hot-spot
     # traction-peak frame.  This is the eps_y the fitter should hand XKINT.
@@ -1988,8 +1988,8 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
 
     saved = []
     base = sanitize_loading_label(loading_label)
-    hist_name = os.path.join(output_dir, '{}_concentration_history_{}_theta{:.0f}deg.csv'.format(
-        output_model_name, base, theta_deg))
+    hist_name = os.path.join(output_dir, '{}_concentration_history_{}.csv'.format(
+        output_model_name, base))
     hist_fields = ['Frame', 'Time', mac_key, eps_key, avg_key, pk_key,
                    'SCF_loc', 'SCFt', 'SCFt_tot', 'Mtx_Mises_avg', 'Mtx_Mises_pk',
                    'Mtx_Mises_2m', 'Mtx_Mises_q90', 'Mtx_Mises_q95',
@@ -2008,8 +2008,8 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
         saved.append(hist_name)
         print("  concentration history: %s" % os.path.basename(hist_name))
 
-    sum_name = os.path.join(output_dir, '{}_concentration_summary_{}_theta{:.0f}deg.txt'.format(
-        output_model_name, base, theta_deg))
+    sum_name = os.path.join(output_dir, '{}_concentration_summary_{}.txt'.format(
+        output_model_name, base))
     if write_summary_txt(sum_name, summary):
         saved.append(sum_name)
         print("  concentration summary: %s" % os.path.basename(sum_name))
@@ -2023,11 +2023,8 @@ def extract_concentration_factors(odb, step_name, instance_name, rp_history,
           % (summary['onset_by'], summary['debond_onset_macro_strain'],
              summary['debond_onset_macro_stress'], summary['K_int_debond_driver']))
 
-    # rev.20: parameter FITTING is intentionally NOT performed here.  The plugin
-    # only OUTPUTS data -- the concentration_history CSV + summary written above.
-    # Fit the UMAT card (PROPS 40-54) from that CSV with the standalone, modular
-    # fitter (data output and fitting are kept separate):
-    #     D:\Desktop\SCI_3\program\fit_UMAT_curves.py
+    # Parameter fitting is intentionally not performed here; the CSV and
+    # summary written above are the plugin's output.
     return saved, summary
 
 def calculate_effective_properties(rp_results, L, H, W, applied_strains):
@@ -2357,7 +2354,7 @@ def calculate_true_stress_strain_from_rp(rp_results, loading_type, L, H, W):
     return true_results
 
 
-def save_true_stress_strain(true_results, output_dir, modelName, loading_type, theta_deg=0):
+def save_true_stress_strain(true_results, output_dir, modelName, loading_type):
     """Write the true stress-strain CSV.
 
     Column layout depends on loading_type so the shear convention (tensor vs
@@ -2376,8 +2373,8 @@ def save_true_stress_strain(true_results, output_dir, modelName, loading_type, t
         return None
 
     filename = os.path.join(output_dir,
-                           '{}_true_stress_strain_{}_theta{:.0f}deg.csv'.format(
-                               modelName, sanitize_loading_label(loading_type), theta_deg))
+                           '{}_true_stress_strain_{}.csv'.format(
+                               modelName, sanitize_loading_label(loading_type)))
 
     # Detect shear mode primarily from the result dict's actual keys (so the
     # caller can pass an already-sanitized label like 'Shear23_Temp_025' and we
@@ -2410,7 +2407,7 @@ def save_true_stress_strain(true_results, output_dir, modelName, loading_type, t
 
 
 
-def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x, epsilon_y, epsilon_z,
+def rve_multiaxial_analysis_complete(part, inst, meshsens, epsilon_x, epsilon_y, epsilon_z,
                                    gamma_xy, gamma_yz, gamma_zx, CPU, umat_file='', output_dir=None,
                                    save_volume_avg=True, temperature_celsius=None, loading_label='Analysis',
                                    legacy_loading_type='', unsymmetric_solver=False, large_deformation=True,
@@ -2482,7 +2479,6 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
         if has_duplicate_coordinate_nodes(mdb.models[modelName], instanceName, meshsens):
             Nodeset = unique_coordinate_nodes(Nodeset, meshsens)
             print('[Interface] Duplicate coordinate nodes detected; main RVE layer uses label representatives and extra interface layers are constrained separately.')
-        print("Resetting existing elastoplastic analysis objects...")
         _reset_elastoplastic_analysis_state(mdb.models[modelName], a)
         if temperature_celsius is not None:
             _set_uniform_initial_temperature(
@@ -2585,29 +2581,16 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
         H = abs(May - Mny)
         W = abs(Maz - Mnz)
         
-        # Strain transformation calculations
-        theta_rad = np.deg2rad(theta_deg)
-        c = np.cos(theta_rad)
-        s = np.sin(theta_rad)
-        
-        # Local coordinate system strain components
-        # ========== In-plane strain conversion (x-y plane) ==========
-        epsilon_1 = c**2 * epsilon_x + s**2 * epsilon_y + s*c * gamma_xy
-        epsilon_2 = s**2 * epsilon_x + c**2 * epsilon_y - s*c * gamma_xy
-        gamma_12 = -2*s*c * epsilon_x + 2*s*c * epsilon_y + (c**2 - s**2) * gamma_xy
-        
-        # ========== Out-of-plane strain (z-direction constant) ==========
+        # Macroscopic strains are prescribed directly along the RVE axes
+        # (x = fiber direction, y-z = transverse plane). Off-axis loading is not
+        # handled here: a uniaxial off-axis test is a mixed stress/strain problem
+        # (one prescribed strain, five zero stresses) and needs its own module.
+        epsilon_1 = epsilon_x
+        epsilon_2 = epsilon_y
         epsilon_3 = epsilon_z
-        
-        # ========== Out-of-plane shear strain conversion ==========
-        # Convert the global γyz and γzx to the rotated material coordinate system γ23 and γ31
-        gamma_23 = c * gamma_yz + s * gamma_zx
-        gamma_31 = -s * gamma_yz + c * gamma_zx
-        
-        # Annotation
-        # Direction 1: in the x-y plane at angle θ to the x-axis (fiber direction in the off-axis case)
-        # Direction 2: in the x-y plane, perpendicular to direction 1
-        # Direction 3: equal to the z-direction (thickness direction, perpendicular to the fiber plane)
+        gamma_12 = gamma_xy
+        gamma_23 = gamma_yz
+        gamma_31 = gamma_zx
         
         # Calculate displacements
         # for tensile
@@ -3056,53 +3039,14 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
         if 'Step-1' in mdb.models[modelName].steps.keys():
             del mdb.models[modelName].steps['Step-1']
         
-        # Build kwargs so we only set matrixStorage when the user asked for it.
-        # Default = symmetric (Abaqus's default); UNSYMMETRIC roughly doubles
-        # memory and time, so it should stay opt-in.
-        # ============================================================
-        # DEFAULT STEP: quasi-static implicit dynamics
-        # (*DYNAMIC, APPLICATION=QUASI-STATIC).  Inertia regularizes the
-        # softening localization / snap-back that stalled the pure-static
-        # solver at the damage band (the energy check showed ALLSD blowing
-        # up only in the terminal stall), so the descending branch can be
-        # traced further.  No *STATIC stabilize damping here; regularization
-        # is physical inertia, monitored via KE_Ratio (ALLKE/ALLIE) in the
-        # energy_check CSV (target < ~2%).
-        # NOTE: implicit dynamics needs a mass matrix -> ensure_material_density
-        # below adds a *Density to any material missing one.
-        # ============================================================
-        # ---- DISABLED 2026-06-22 (reverted to *Static; quasi-static dynamics
-        #      retired).  Quasi-static implicit dynamics is unsuitable for a
-        #      PBC RVE driven through MASSLESS reference-point control nodes:
-        #      the M/(beta*dt^2) inertia term is ill-defined on those DOFs
-        #      (increment-1 NaN), and the inertia regularization pollutes the
-        #      stress-strain curve that Melro (2013) defines as a *static*
-        #      result.  Softening is now handled by *Static adaptive energy
-        #      stabilization (below), mirroring PBC_UDFRP_Elastoplastic.py.
-        #      To restore: uncomment this block, re-comment the StaticStep block.
-        # dyn_step_kwargs = dict(
-        #     previous='Initial',
-        #     description='RVE Multi-axial Loading (quasi-static implicit dynamics)',
-        #     timePeriod=1.0, maxNumInc=100000,
-        #     application=QUASI_STATIC,
-        #     initialInc=0.001, minInc=1e-9, maxInc=0.01,
-        #     nlgeom=ON if large_deformation else OFF,
-        # )
-        # if unsymmetric_solver:
-        #     dyn_step_kwargs['matrixStorage'] = UNSYMMETRIC
-        #     print('[QuasiStatic] Using UNSYMMETRIC matrix storage (UMAT request).')
-        # mdb.models[modelName].ImplicitDynamicsStep(name='Step-1', **dyn_step_kwargs)
-        # ensure_material_density(mdb.models[modelName])
-        # print('[QuasiStatic] *DYNAMIC, APPLICATION=QUASI-STATIC step created.')
-
-        # ------------------------------------------------------------
-        # ACTIVE STATIC STEP (re-enabled 2026-06-22).  Adaptive energy
-        # stabilization (DISSIPATED_ENERGY_FRACTION, DEF=2e-4, ALLSDTOL=0.05)
-        # damps the damage-softening localization without physical inertia,
-        # matching the no-interface kernel.  IMPORTANT: with no inertia term,
-        # the UMAT must run IDMTAN=0 (secant); IDMTAN=1 (consistent tangent)
-        # is indefinite in softening and will diverge under *Static.
-        # ------------------------------------------------------------
+        # Step-1 options (all set from the GUI):
+        #   analysis_procedure      : STATIC (default) or QUASI_STATIC_DYNAMIC
+        #   stabilization_magnitude : dissipated-energy fraction for *Static
+        #   unsymmetric_solver      : opt-in UNSYMMETRIC storage (about 2x memory/time)
+        # With *Static and no inertia term the UMAT must use the secant
+        # tangent (IDMTAN=0); the consistent tangent is indefinite in softening.
+        # Implicit dynamics needs a mass matrix, so ensure_material_density adds
+        # a *Density to any material missing one.
         # GUI-driven stabilization magnitude (DEF); None -> 2e-4 default.
         _stab_mag = 2e-4 if stabilization_magnitude is None else float(stabilization_magnitude)
         if not (_stab_mag > 0.0):
@@ -3127,12 +3071,9 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
             )
             if unsymmetric_solver:
                 dyn_step_kwargs['matrixStorage'] = UNSYMMETRIC
-                print('[QuasiStatic] Using UNSYMMETRIC matrix storage (UMAT request).')
             mdb.models[modelName].ImplicitDynamicsStep(name='Step-1', **dyn_step_kwargs)
             ensure_material_density(mdb.models[modelName])
-            print('[QuasiStatic] *DYNAMIC, APPLICATION=QUASI-STATIC step created.')
         else:
-            print('[StaticStep] DISSIPATED_ENERGY_FRACTION stabilizationMagnitude = %g' % _stab_mag)
             static_step_kwargs = dict(
                 previous='Initial',
                 description='RVE Multi-axial Loading Analysis',
@@ -3146,7 +3087,6 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
             )
             if unsymmetric_solver:
                 static_step_kwargs['matrixStorage'] = UNSYMMETRIC
-                print('[StaticStep] Using UNSYMMETRIC matrix storage (UMAT request).')
             mdb.models[modelName].StaticStep(name='Step-1', **static_step_kwargs)
 
         # ---- Solution Controls (SYNCED from PBC_UDFRP_Elastoplastic.py) ----
@@ -3170,8 +3110,6 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
             timeIncrementation=(8.0, 10.0, 9.0, 30.0,
                                 10.0, 4.0, 12.0, 10.0, 6.0, 3.0, 50.0),
         )
-        print('[StaticStep] Solution controls: R_n=0.02, C_n=1.0, '
-              'discontinuous=ON (I0=8, IR=10), IC=30, I_A=10.')
         '''
         # For UMAT
         mdb.models[modelName].ImplicitDynamicsStep(name='Step-1', previous='Initial', nlgeom=ON,
@@ -3319,9 +3257,7 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                     (Max, May, Maz, Mnx, Mny, Mnz), meshsens, macro_map,
                     'InterfacePBC-L{}-{}'.format(layerIndex, sanitize_loading_label(loading_label_to_use))
                 )
-                print('[Interface] Added elastoplastic PBC equations for duplicate node layer %s (%s nodes).' % (layerIndex, len(layerNodes)))
 
-            print("Applying boundary conditions for %s..." % loading_label_to_use)
             
             region_c6 = a.sets['c6']
             mdb.models[modelName].DisplacementBC(name='BC-Fix-c6', createStepName='Step-1',
@@ -3354,7 +3290,6 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
             print("Constraints and BCs applied successfully for %s" % loading_label_to_use)
             
             # Set up output requests
-            print("Setting up output requests...")
             
             for req in mdb.models[modelName].fieldOutputRequests.keys():
                 if req != 'F-Output-1':
@@ -3376,14 +3311,10 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                     variables=_fo_vars,
                     numIntervals=_n_intervals, timeMarks=OFF
                 )
-                print('[FieldOutput] %d evenly-spaced frames (numIntervals); '
-                      'macroscopic curve ~%d points, ODB kept small.'
-                      % (_n_intervals, _n_intervals))
             else:
                 mdb.models[modelName].fieldOutputRequests['F-Output-1'].setValues(
                     variables=_fo_vars, frequency=1
                 )
-                print('[FieldOutput] every increment (frequency=1, full output).')
 
             # History output request for reference points
             h_output_counter = 1
@@ -3463,7 +3394,7 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                 conc_files, conc_summary = extract_concentration_factors(
                     odb, step_name, instanceName, rp_time_history,
                     output_dir, output_model_name,
-                    loading_label=loading_label_to_use, theta_deg=theta_deg)
+                    loading_label=loading_label_to_use)
                 results_data['concentration_summary'] = conc_summary
             except Exception as _ce:
                 print("  concentration extraction skipped: %s" % str(_ce))
@@ -3475,7 +3406,7 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                 _energy_label = '{}_{}'.format(_energy_label, _energy_temp_lbl)
             energy_csv = extract_energy_history(
                 odb, step_name, output_dir, output_model_name,
-                theta_deg=theta_deg, loading_label=_energy_label)
+                loading_label=_energy_label)
 
             # Close ODB
             odb.close()
@@ -3512,7 +3443,6 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                     output_dir,
                     output_model_name,
                     applied_strains=applied_strains,
-                    theta_deg=theta_deg,
                     loading_label=file_loading_label
                 )
                 saved_files.extend(history_files)
@@ -3528,8 +3458,7 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                         true_results,
                         output_dir,
                         output_model_name,
-                        file_loading_label,
-                        theta_deg
+                        file_loading_label
                     )
                     if true_file:
                         saved_files.append(true_file)
@@ -3557,19 +3486,12 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
                 'Instance': instanceName,
                 'Job_Name': job_name,
                 'Loading_Label': loading_label_to_use,
-                'Off_Axis_Angle_deg': theta_deg,
                 'Input_Strain_X': epsilon_x,
                 'Input_Strain_Y': epsilon_y,
                 'Input_Strain_Z': epsilon_z,
                 'Input_Shear_XY': gamma_xy,
                 'Input_Shear_YZ': gamma_yz,
                 'Input_Shear_ZX': gamma_zx,
-                'Local_Strain_1': epsilon_1,
-                'Local_Strain_2': epsilon_2,
-                'Local_Strain_3': epsilon_3,
-                'Local_Shear_12': gamma_12,
-                'Local_Shear_23': gamma_23,
-                'Local_Shear_31': gamma_31,
                 'RVE_Length': L,
                 'RVE_Height': H,
                 'RVE_Width': W,
@@ -3612,10 +3534,8 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
             
             print("Analysis Parameters:")
             print("  Model: %s, Instance: %s" % (output_model_name, instanceName))
-            print("  Off-axis angle: %.2f degrees" % theta_deg)
             print("  Applied global strains: epsilon_x=%.6f, epsilon_y=%.6f, epsilon_z=%.6f" % (epsilon_x, epsilon_y, epsilon_z))
             print("  Applied shear strains: gamma_xy=%.6f, gamma_yz=%.6f, gamma_zx=%.6f" % (gamma_xy, gamma_yz, gamma_zx))
-            print("  Local strains: epsilon_1=%.6f, epsilon_2=%.6f, epsilon_3=%.6f" % (epsilon_1, epsilon_2, epsilon_3))
             print("  RVE dimensions: L=%.6f, H=%.6f, W=%.6f" % (L, H, W))
             
             if rp_results:
@@ -3660,9 +3580,9 @@ def rve_multiaxial_analysis_complete(part, inst, meshsens, theta_deg, epsilon_x,
         return True
 
 # GUI entry point used by RVE_Builder_UDFRPs.Analysis -- thin wrapper.
-def rve_multiaxial_analysis_complete_gui(modelName, partName, meshSens, theta, strainX, strainY, strainZ, shearXY, shearYZ, shearZX, cpu, umatName='', unsymmetric_solver=False, large_deformation=True):
+def rve_multiaxial_analysis_complete_gui(modelName, partName, meshSens, strainX, strainY, strainZ, shearXY, shearYZ, shearZX, cpu, umatName='', unsymmetric_solver=False, large_deformation=True):
     return rve_multiaxial_analysis_complete(
-        part=modelName, inst=partName, meshsens=meshSens, theta_deg=theta,
+        part=modelName, inst=partName, meshsens=meshSens,
         epsilon_x=strainX, epsilon_y=strainY, epsilon_z=strainZ,
         gamma_xy=shearXY, gamma_yz=shearYZ, gamma_zx=shearZX,
         CPU=cpu, umat_file=umatName, output_dir=None, save_volume_avg=True,

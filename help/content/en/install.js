@@ -14,7 +14,7 @@ window.helpContent['en/install'] = `
 
 <h2>Install location</h2>
 
-<p>Copy the entire <code>RVE_Builder_plugin</code> folder into your Abaqus
+<p>Copy the entire <code>RVE_Builder_UDFRP_plugin</code> folder into your Abaqus
 plug-ins directory. On Windows that is typically:</p>
 
 <pre><code>C:\\SIMULIA\\CAE\\plugins\\2024\\</code></pre>

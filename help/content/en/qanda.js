@@ -9,7 +9,7 @@ window.helpContent['en/qanda'] = `
   This section gives a peek under the hood — the core working principles of
   each tab in plain-language Q&amp;A form. The goal is to help you reason
   about what the plug-in is doing and to debug unexpected behaviour, not to
-  replace the mathematical references listed in <em>6 · References</em>.
+  replace the mathematical references listed in <em>5 · References</em>.
 </p>
 
 <h2>Create RVE</h2>
@@ -20,9 +20,13 @@ window.helpContent['en/qanda'] = `
   <p>For Monte Carlo, the generator repeatedly draws a candidate centre
   inside the RVE rectangle and accepts it if every existing fiber is at
   least the user-supplied <em>safe distance</em> away. Rejected candidates
-  are simply re-drawn. For RSE, fibers are first scattered freely, then a
-  "growth" phase iteratively repels and re-positions them until inter-fiber
-  distances satisfy <code>Lmin ≤ d ≤ Lmax</code>. Both methods enforce
+  are simply re-drawn. RSE starts from one seed fiber and adds fibers one
+  at a time: an existing fiber is picked at random and a new one is placed
+  at a random surface-to-surface distance in <code>[Lmin, Lmax]</code>
+  from it, accepted if it overlaps no other fiber (or keeps the optional
+  <code>MIN_GAP</code> from all of them). Packing continues until the cell
+  jams, and fibers are then removed at random down to the target Vf. Both
+  methods enforce
   periodicity at the four RVE faces: a fiber that crosses one face is
   duplicated on the opposite face so the cross-section tiles seamlessly.</p>
 </details>
@@ -37,9 +41,12 @@ window.helpContent['en/qanda'] = `
   exact edges, arcs and faces of the cross-section. The 2D sketch is
   extruded along X to form the 3D <code>UDComposite</code> part. Finally,
   <code>part.findAt(point)</code> with carefully chosen probe points is
-  used to collect cells, edges and faces into the named Sets listed in
-  <em>3.1.8</em> — every Set is built deterministically from the geometry,
-  not from indices.</p>
+  used to collect edges and faces into the named Sets listed in
+  <em>3.1.8</em>. The cell Sets <code>Set-Fiber</code> and
+  <code>Set-Matrix</code> are assigned geometrically: a point inside each
+  cell is tested against the fiber circles (periodic images included), so
+  the assignment does not depend on the order in which Abaqus numbers the
+  cells after the Boolean merge.</p>
 </details>
 
 <details class="collapsible">
@@ -52,7 +59,41 @@ window.helpContent['en/qanda'] = `
   <code>parameters_output</code> TXT file.</p>
 </details>
 
+<details class="collapsible">
+  <summary>Q. What happens when a fiber sits on a corner of the RVE?</summary>
+  <p>A fiber covering a corner is cut into four slivers, one at each corner.
+  The Monte Carlo and RSE generators therefore never produce one: a
+  candidate whose circle covers or grazes a corner, or that crosses an RVE
+  edge (or stops short of it) by less than 10% of the radius, is rejected
+  (<code>BOUNDARY_CLEARANCE</code> in the generator files). User coordinate
+  files are taken as they are. If one of your fibers covers a corner,
+  <code>Set-Fiber</code> / <code>Set-Matrix</code> are still assigned by
+  geometry, but the corner slivers are hard to mesh and the edge seeds may
+  come out uneven. Shift the whole pattern by a constant offset (wrapping
+  the centres periodically) so that no fiber covers a corner, and check
+  the two cell Sets in Abaqus before meshing.</p>
+</details>
+
 <h2>Mesh Control</h2>
+
+<details class="collapsible">
+  <summary>Q. Meshing fails, or a few elements are flagged as errors.
+  Why?</summary>
+  <p>The sweep mesh follows the cross-section partition exactly, so the
+  mesh is only as good as the geometry. Two fibers that nearly touch leave
+  a matrix channel thinner than one element, and a fiber that crosses an
+  edge by a hair produces a tiny cap; both make the mesher fail or leave a
+  handful of distorted elements. Remedies, in order: raise the minimum
+  fiber gap (<em>Safe distance</em> for Monte Carlo, the
+  <code>MIN_GAP</code> constant in <code>Generate_UDFRPs_RSE.py</code> for
+  RSE) so the narrowest channel is at least about one element wide;
+  regenerate the coordinates, since a different random draw often meshes
+  cleanly; increase the circumferential seed count; or switch
+  <em>Element Shape</em> to WEDGE, which tolerates narrow regions better.
+  A few distorted elements in narrow channels have negligible volume and
+  usually do not change the homogenized moduli; for damage or interface
+  studies, regenerate instead.</p>
+</details>
 
 <details class="collapsible">
   <summary>Q. Why does the plug-in restrict the element types I can
@@ -148,8 +189,8 @@ window.helpContent['en/qanda'] = `
 
 <details class="collapsible">
   <summary>Q. What does the elasto-plastic analysis actually solve?</summary>
-  <p>It applies user-prescribed macroscopic strains (single or biaxial
-  with an off-axis angle) under PBC and lets Abaqus integrate the
+  <p>It applies user-prescribed macroscopic strains (single or biaxial,
+  along the RVE axes) under PBC and lets Abaqus integrate the
   nonlinear constitutive law of fiber + matrix step by step. If you
   provide a UMAT, that subroutine takes over the matrix's constitutive
   behaviour; otherwise the plug-in uses whatever you defined in the
@@ -170,6 +211,6 @@ window.helpContent['en/qanda'] = `
   <div class="callout-title">Want more depth?</div>
   <p>For the mathematical derivations behind PBC, RSE/Monte-Carlo fiber
   generation, and the bridging / Kerner micromechanical framework used in
-  the source paper, see <em>6 · References</em>.</p>
+  the source paper, see <em>5 · References</em>.</p>
 </div>
 `;

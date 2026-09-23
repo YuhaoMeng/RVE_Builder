@@ -1,11 +1,40 @@
 # -*- coding: utf-8 -*-
 ###############################################################################
-# PBC_UDFRP_thermal_conductivity.py
+# PBC_UDFRP_thermal_conductivity_Interfaceh.py
 # -----------------------------------------------------------------------------
 # Steady-state thermal-conductivity homogenization of a UDFRP RVE under
 # periodic temperature boundary conditions. Returns the effective
 # conductivity tensor components K11/K22/K33 (and off-diagonals when needed).
 # Called from RVE_Builder_UDFRPs.Analysis when analysis_type == 5.
+#
+# -----------------------------------------------------------------------------
+# Based on EasyPBC Ver. 1.4 (08/10/2018, updated 27/08/2019).
+# Adapted for the "RVE Builder (UDFRPs)" Abaqus plug-in.
+# Modifications Copyright (C) 2026 Yuhao Meng.
+#
+# From EasyPBC:
+#      EasyPBC is an ABAQUS CAE plugin developed to estimate the homogenised
+#      effective elastic properties of user-defined representative volume
+#      elements.
+#      Copyright (C) 2018  Sadik Lafta Omairey
+#
+#      This program is free software: you can redistribute it and/or modify
+#      it under the terms of the GNU General Public License as published by
+#      the Free Software Foundation, either version 3 of the License, or
+#      (at your option) any later version.
+#
+#      This program is distributed in the hope that it will be useful,
+#      but WITHOUT ANY WARRANTY; without even the implied warranty of
+#      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#      GNU General Public License for more details.
+#
+#      You should have received a copy of the GNU General Public License
+#      along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#      Citation: Omairey S, Dunning P, Sriramula S (2018) Development of an
+#      ABAQUS plugin tool for periodic RVE homogenisation.
+#      Engineering with Computers. https://doi.org/10.1007/s00366-018-0616-4
+# -----------------------------------------------------------------------------
 ###############################################################################
 ## Importing ABAQUS Data and Python modules ##
 from abaqus import *
@@ -166,8 +195,7 @@ def _calculate_conductivity_from_step(odb, upperName, stepName, RVE_volume, temp
         elif element_type == 'DC3D6':
             num_ip = 6
         else:
-            print(f"Unsupported element type: {element_type}")
-            continue
+            continue   # interface / contact elements carry no HFL*IVOL
 
         for ip in range(1, num_ip + 1):
             key = (element_label, ip)
@@ -197,16 +225,60 @@ def has_duplicate_coordinate_nodes(modelObj, instanceName, tolerance):
         seen.add(key)
     return False
 
-def unique_coordinate_nodes(nodes, tolerance):
+def interface_node_class_map(modelObj, instanceName):
+    """label -> 0 matrix-side, 1 fibre-side, 2 referenced by no solid.
+
+    Splitting the fibre/matrix interface leaves two or three coincident nodes at
+    every interface position, and which copy carries the lower label is not
+    consistent along the interface.  The coincident layers must therefore be
+    identified by the solid a node belongs to, not by label order, otherwise the
+    periodic equations pair a fibre-side node on one face with a spare node on
+    the opposite face and the periodicity of that part of the interface is lost."""
+    instance = modelObj.rootAssembly.instances[instanceName]
+    fiber = set()
+    other = set()
+    for setName in instance.sets.keys():
+        upper = setName.upper()
+        if upper not in ('SET-FIBER', 'SET-MATRIX', 'SET-VOID'):
+            continue
+        target = fiber if upper == 'SET-FIBER' else other
+        try:
+            elements = instance.sets[setName].elements
+        except Exception:
+            continue
+        for element in elements:
+            for label in element.connectivity:
+                target.add(label)
+    classes = {}
+    for label in other:
+        classes[label] = 0
+    for label in fiber:
+        if label not in classes:
+            classes[label] = 1
+    return classes
+
+def _interface_node_rank(classes, node):
+    return (classes.get(node.label, 2), node.label)
+
+def unique_coordinate_nodes(nodes, tolerance, classes=None):
+    """One representative per coordinate: the matrix-side node where the class
+    map is available, otherwise the lowest label (legacy behaviour)."""
+    classes = classes or {}
     representatives = {}
     for node in nodes:
         key = _interface_coord_key(node.coordinates, tolerance)
         current = representatives.get(key)
-        if current is None or node.label < current.label:
+        if current is None or _interface_node_rank(classes, node) < _interface_node_rank(classes, current):
             representatives[key] = node
     return [representatives[key] for key in sorted(representatives.keys())]
 
-def _interface_duplicate_node_layers(nodes, tolerance):
+def _interface_duplicate_node_layers(nodes, tolerance, classes=None):
+    """The extra coincident layers, ordered matrix-side, fibre-side, spare.
+
+    Layer 1 holds the fibre-side copies everywhere along the interface, so its
+    periodic equations connect a fibre-side node to its fibre-side partner on
+    the opposite face.  Nodes used by no solid are dropped."""
+    classes = classes or {}
     grouped = {}
     for node in nodes:
         key = _interface_coord_key(node.coordinates, tolerance)
@@ -219,160 +291,114 @@ def _interface_duplicate_node_layers(nodes, tolerance):
     for layerIndex in range(1, maxCount):
         layerNodes = []
         for nodeList in grouped.values():
-            nodeList = sorted(nodeList, key=lambda item: item.label)
+            nodeList = sorted(nodeList, key=lambda item: _interface_node_rank(classes, item))
             if len(nodeList) > layerIndex:
-                layerNodes.append(nodeList[layerIndex])
+                candidate = nodeList[layerIndex]
+                if classes.get(candidate.label, 2) != 2:
+                    layerNodes.append(candidate)
         if layerNodes:
             layers.append(sorted(layerNodes, key=lambda item: item.label))
     return layers
 
-def _interface_partition_boundary_nodes(nodes, bounds, tolerance):
-    Max, May, Maz, Mnx, Mny, Mnz = bounds
-    data = dict([(name, {}) for name in (
-        'fronts', 'backs', 'tops', 'bots', 'lefts', 'rights',
-        'ftedge', 'fbedge', 'btedge', 'bbedge',
-        'fledge', 'fredge', 'bledge', 'bredge',
-        'ltedge', 'lbedge', 'rtedge', 'rbedge',
-    )])
-    corners = dict([(name, []) for name in ('c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8')])
-    for node in nodes:
-        x, y, z = node.coordinates
-        label = node.label
-        coord = [x, y, z]
-        onXMax = abs(x - Max) <= tolerance
-        onXMin = abs(x - Mnx) <= tolerance
-        onYMax = abs(y - May) <= tolerance
-        onYMin = abs(y - Mny) <= tolerance
-        onZMax = abs(z - Maz) <= tolerance
-        onZMin = abs(z - Mnz) <= tolerance
-        if onXMax and onYMax and onZMax:
-            corners['c1'].append(label)
-        elif onXMin and onYMax and onZMax:
-            corners['c2'].append(label)
-        elif onXMin and onYMax and onZMin:
-            corners['c3'].append(label)
-        elif onXMax and onYMax and onZMin:
-            corners['c4'].append(label)
-        elif onXMax and onYMin and onZMax:
-            corners['c5'].append(label)
-        elif onXMin and onYMin and onZMax:
-            corners['c6'].append(label)
-        elif onXMin and onYMin and onZMin:
-            corners['c7'].append(label)
-        elif onXMax and onYMin and onZMin:
-            corners['c8'].append(label)
-        elif onXMax and onYMax:
-            data['ftedge'][label] = coord
-        elif onXMax and onYMin:
-            data['fbedge'][label] = coord
-        elif onXMin and onYMax:
-            data['btedge'][label] = coord
-        elif onXMin and onYMin:
-            data['bbedge'][label] = coord
-        elif onXMax and onZMax:
-            data['fledge'][label] = coord
-        elif onXMax and onZMin:
-            data['fredge'][label] = coord
-        elif onXMin and onZMax:
-            data['bledge'][label] = coord
-        elif onXMin and onZMin:
-            data['bredge'][label] = coord
-        elif onZMax and onYMax:
-            data['ltedge'][label] = coord
-        elif onZMax and onYMin:
-            data['lbedge'][label] = coord
-        elif onZMin and onYMax:
-            data['rtedge'][label] = coord
-        elif onZMin and onYMin:
-            data['rbedge'][label] = coord
-        elif onXMax:
-            data['fronts'][label] = coord
-        elif onXMin:
-            data['backs'][label] = coord
-        elif onZMax:
-            data['lefts'][label] = coord
-        elif onZMin:
-            data['rights'][label] = coord
-        elif onYMax:
-            data['tops'][label] = coord
-        elif onYMin:
-            data['bots'][label] = coord
-    return data, corners
-
-def _interface_pair_groups(slaveMap, masterMap, axes, tolerance):
-    def reduced_key(coord):
-        return _interface_coord_key([coord[index] for index in axes], tolerance)
-    slaveGroups = {}
-    masterGroups = {}
-    for label, coord in slaveMap.items():
-        slaveGroups.setdefault(reduced_key(coord), []).append(label)
-    for label, coord in masterMap.items():
-        masterGroups.setdefault(reduced_key(coord), []).append(label)
-    slaveLabels = []
-    masterLabels = []
-    for key in sorted(slaveGroups.keys()):
-        if key not in masterGroups:
-            continue
-        sLabels = sorted(slaveGroups[key])
-        mLabels = sorted(masterGroups[key])
-        pairCount = min(len(sLabels), len(mLabels))
-        slaveLabels.extend(sLabels[:pairCount])
-        masterLabels.extend(mLabels[:pairCount])
-    return slaveLabels, masterLabels
-
 def _interface_add_thermal_layer_pbc(eqs, instanceName, layerNodes, bounds, tolerance, equation_prefix):
-    data, corners = _interface_partition_boundary_nodes(layerNodes, bounds, tolerance)
-    fronts, backs = _interface_pair_groups(data['fronts'], data['backs'], (1, 2), tolerance)
-    tops, bots = _interface_pair_groups(data['tops'], data['bots'], (0, 2), tolerance)
-    lefts, rights = _interface_pair_groups(data['lefts'], data['rights'], (0, 1), tolerance)
-    ftedge, btedge = _interface_pair_groups(data['ftedge'], data['btedge'], (1, 2), tolerance)
-    btedge2, bbedge = _interface_pair_groups(data['btedge'], data['bbedge'], (0, 2), tolerance)
-    bbedge2, fbedge = _interface_pair_groups(data['bbedge'], data['fbedge'], (1, 2), tolerance)
-    fledge, bledge = _interface_pair_groups(data['fledge'], data['bledge'], (1, 2), tolerance)
-    bledge2, bredge = _interface_pair_groups(data['bledge'], data['bredge'], (0, 1), tolerance)
-    bredge2, fredge = _interface_pair_groups(data['bredge'], data['fredge'], (1, 2), tolerance)
-    ltedge, lbedge = _interface_pair_groups(data['ltedge'], data['lbedge'], (0, 2), tolerance)
-    lbedge2, rbedge = _interface_pair_groups(data['lbedge'], data['rbedge'], (0, 1), tolerance)
-    rbedge2, rtedge = _interface_pair_groups(data['rbedge'], data['rtedge'], (0, 2), tolerance)
-    edgeRows = [(a1, b1, c1, d1) for a1, b1, b2, c1, c2, d1 in zip(ftedge, btedge, btedge2, bbedge, bbedge2, fbedge) if b1 == b2 and c1 == c2]
-    ftedge, btedge, bbedge, fbedge = zip(*edgeRows) if edgeRows else ([], [], [], [])
-    edgeRows = [(a1, b1, c1, d1) for a1, b1, b2, c1, c2, d1 in zip(fledge, bledge, bledge2, bredge, bredge2, fredge) if b1 == b2 and c1 == c2]
-    fledge, bledge, bredge, fredge = zip(*edgeRows) if edgeRows else ([], [], [], [])
-    edgeRows = [(a1, b1, c1, d1) for a1, b1, b2, c1, c2, d1 in zip(ltedge, lbedge, lbedge2, rbedge, rbedge2, rtedge) if b1 == b2 and c1 == c2]
-    ltedge, lbedge, rbedge, rtedge = zip(*edgeRows) if edgeRows else ([], [], [], [])
+    """Periodic temperature equations for one coincident interface layer.
+
+    Every layer node on the RVE boundary is reduced to the minimum faces of the
+    box, recording on which maximum faces it sat (shift s in {0,1}^3).  Nodes
+    with the same reduced position are periodic images of one another: two on
+    a face, four on an edge, eight at the corners.  Each group is chained,
+    T(n_k+1) - T(n_k) = sum_i (s_k+1,i - s_k,i) dT_i, with dT = (RP1, RP2, RP3),
+    so faces, edges and corners are handled by one rule and every node is
+    eliminated at most once."""
+    Max, May, Maz, Mnx, Mny, Mnz = bounds
+    lo = (Mnx, Mny, Mnz)
+    hi = (Max, May, Maz)
+    rp = ('RP1', 'RP2', 'RP3')
+    entries = []                                   # (reduced coord, shift, label)
+    for node in layerNodes:
+        coord = list(node.coordinates)
+        shift = [0, 0, 0]
+        onBoundary = False
+        for axis in range(3):
+            if abs(coord[axis] - hi[axis]) <= tolerance:
+                coord[axis] = lo[axis]
+                shift[axis] = 1
+                onBoundary = True
+            elif abs(coord[axis] - lo[axis]) <= tolerance:
+                coord[axis] = lo[axis]
+                onBoundary = True
+        if onBoundary:
+            entries.append((coord, tuple(shift), node.label))
+    # Periodic images are matched within `tolerance` on every axis, as the main
+    # face pairing does; plain bin rounding would split pairs whose coordinates
+    # straddle a bin boundary by the mesh's own round-off.
+    bins = {}
+    for index, (coord, shift, label) in enumerate(entries):
+        bins.setdefault(_interface_coord_key(coord, tolerance), []).append(index)
+    parent = list(range(len(entries)))
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for index, (coord, shift, label) in enumerate(entries):
+        key = _interface_coord_key(coord, tolerance)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for other in bins.get((key[0] + dx, key[1] + dy, key[2] + dz), ()):
+                        if other <= index:
+                            continue
+                        oc = entries[other][0]
+                        if max([abs(coord[k] - oc[k]) for k in range(3)]) <= tolerance:
+                            ra, rb = find(index), find(other)
+                            if ra != rb:
+                                parent[rb] = ra
+    groups = {}
+    for index, (coord, shift, label) in enumerate(entries):
+        groups.setdefault(find(index), []).append((shift, label))
     n = lambda label: _thermal_node_ref(instanceName, label)
-    for i, k in zip(tops, bots):
-        eqs.append([(1.0, n(i), 11), (-1.0, n(k), 11), (-1.0, 'RP2', 11)])
-    for i, k in zip(lefts, rights):
-        eqs.append([(1.0, n(i), 11), (-1.0, n(k), 11), (-1.0, 'RP3', 11)])
-    for i, k in zip(fronts, backs):
-        eqs.append([(1.0, n(i), 11), (-1.0, n(k), 11), (-1.0, 'RP1', 11)])
-    for i, k, j, l in zip(fledge, bledge, bredge, fredge):
-        eqs.append([(1.0, n(i), 11), (-1.0, n(k), 11), (-1.0, 'RP1', 11)])
-        eqs.append([(1.0, n(k), 11), (-1.0, n(j), 11), (-1.0, 'RP3', 11)])
-        eqs.append([(1.0, n(j), 11), (-1.0, n(l), 11), (1.0, 'RP1', 11)])
-    for i, k, j, l in zip(ltedge, lbedge, rbedge, rtedge):
-        eqs.append([(1.0, n(i), 11), (-1.0, n(k), 11), (-1.0, 'RP2', 11)])
-        eqs.append([(1.0, n(k), 11), (-1.0, n(j), 11), (-1.0, 'RP3', 11)])
-        eqs.append([(1.0, n(j), 11), (-1.0, n(l), 11), (1.0, 'RP2', 11)])
-    for i, k, j, l in zip(ftedge, btedge, bbedge, fbedge):
-        eqs.append([(1.0, n(i), 11), (-1.0, n(k), 11), (-1.0, 'RP1', 11)])
-        eqs.append([(1.0, n(k), 11), (-1.0, n(j), 11), (-1.0, 'RP2', 11)])
-        eqs.append([(1.0, n(j), 11), (-1.0, n(l), 11), (1.0, 'RP1', 11)])
-    cornerRows = zip(
-        sorted(corners['c6']), sorted(corners['c2']), sorted(corners['c3']), sorted(corners['c4']),
-        sorted(corners['c8']), sorted(corners['c5']), sorted(corners['c1']), sorted(corners['c7'])
-    )
-    for rowIndex, (c6, c2, c3, c4, c8, c5, c1, c7) in enumerate(cornerRows, start=1):
-        eqs.append([(1.0, n(c6), 11), (-1.0, n(c2), 11), (1.0, 'RP2', 11)])
-        eqs.append([(1.0, n(c2), 11), (-1.0, n(c3), 11), (-1.0, 'RP3', 11)])
-        eqs.append([(1.0, n(c3), 11), (-1.0, n(c4), 11), (1.0, 'RP1', 11)])
-        eqs.append([(1.0, n(c4), 11), (-1.0, n(c8), 11), (-1.0, 'RP2', 11)])
-        eqs.append([(1.0, n(c8), 11), (-1.0, n(c5), 11), (1.0, 'RP3', 11)])
-        eqs.append([(1.0, n(c5), 11), (-1.0, n(c1), 11), (1.0, 'RP2', 11)])
-        eqs.append([(1.0, n(c1), 11), (-1.0, n(c7), 11), (-1.0, 'RP1', 11), (-1.0, 'RP2', 11), (-1.0, 'RP3', 11)])
+    for root in sorted(groups.keys(), key=lambda r: entries[r][2]):
+        chain = sorted(groups[root])
+        for (sa, a), (sb, b) in zip(chain[:-1], chain[1:]):
+            terms = [(1.0, n(b), 11), (-1.0, n(a), 11)]
+            for axis in range(3):
+                d = sb[axis] - sa[axis]
+                if d:
+                    terms.append((-float(d), rp[axis], 11))
+            eqs.append(terms)
 
 ## Plugin main GUI function ##
+
+
+def format_temperature_file_label(temperature_value):
+    """Filesystem-safe label such as Temp_025 or Temp_m050p5 (same convention as the kernel)."""
+    if temperature_value is None:
+        return ''
+    numeric_value = float(temperature_value)
+    sign_prefix = 'm' if numeric_value < 0.0 else ''
+    absolute_text = ('{:.6f}'.format(abs(numeric_value))).rstrip('0').rstrip('.')
+    if absolute_text == '':
+        absolute_text = '0'
+    if '.' in absolute_text:
+        integer_part, fractional_part = absolute_text.split('.', 1)
+        return 'Temp_{}{}p{}'.format(sign_prefix, integer_part.zfill(3), fractional_part)
+    return 'Temp_{}{}'.format(sign_prefix, absolute_text.zfill(3))
+
+def _job_temperature_suffix(intemp, fntemp=None):
+    """'_Temp_025' for a single temperature, '_Temp_025to100' for a ramp, '' if unknown.
+    Appended to job names so ODBs of different temperature points never overwrite each other."""
+    try:
+        lo = float(intemp)
+    except (TypeError, ValueError):
+        return ''
+    try:
+        hi = float(fntemp) if fntemp is not None else lo
+    except (TypeError, ValueError):
+        hi = lo
+    if abs(hi - lo) <= 1.0e-12:
+        return '_' + format_temperature_file_label(lo)
+    return '_' + format_temperature_file_label(lo) + 'to' + format_temperature_file_label(hi).replace('Temp_', '')
 
 def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
     import os
@@ -432,11 +458,13 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
                 CPUs = multiprocessing.cpu_count()
                 print(('Warning: Specified number of CPUs is greater than the available. The maximum available number of CPUs is used (%s CPU(s)).' % CPUs))
         allInterfaceNodes = mdb.models[modelName].rootAssembly.instances[instanceName].nodes
-        interfaceDuplicateLayers = _interface_duplicate_node_layers(allInterfaceNodes, meshsens)
+        interfaceNodeClasses = interface_node_class_map(mdb.models[modelName], instanceName)
+        interfaceDuplicateLayers = _interface_duplicate_node_layers(allInterfaceNodes, meshsens, interfaceNodeClasses)
         Nodeset = allInterfaceNodes
         if has_duplicate_coordinate_nodes(mdb.models[modelName], instanceName, meshsens):
-            Nodeset = unique_coordinate_nodes(Nodeset, meshsens)
-            print('[Interface] Duplicate coordinate nodes detected; main RVE layer uses label representatives and extra interface layers are constrained separately.')
+            Nodeset = unique_coordinate_nodes(Nodeset, meshsens, interfaceNodeClasses)
+            print('[Interface] Split interface: main RVE layer = matrix-side nodes, '
+                  'each further coincident layer is constrained separately.')
         ## Start of sets creation ##                
         j = 0
         x=[]
@@ -951,22 +979,33 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
         eqs = []
         thermal_setup_start = time.time()
         if K11 == True or K22 == True or K33 == True:
+            # Left-over PBC constraints are cleared before the keyword-block
+            # equations are written; interface constraints ('ThermalSeam-*') are
+            # part of the physical model and must survive.
             for i in list(mdb.models[modelName].constraints.keys()):
+                    if str(i).startswith('ThermalSeam-'):
+                        continue
                     del mdb.models[modelName].constraints[i]
             _append_standard_thermal_pbc(
                 eqs, instanceName, tops, bots, lefts, rights, fronts, backs,
                 fledge, bledge, bredge, fredge, ltedge, lbedge, rbedge,
                 rtedge, ftedge, btedge, bbedge, fbedge
             )
-            for layerIndex, layerNodes in enumerate(interfaceDuplicateLayers, start=1):
-                _interface_add_thermal_layer_pbc(
-                    eqs, instanceName, layerNodes,
-                    (Max, May, Maz, Mnx, Mny, Mnz), meshsens,
-                    'InterfaceK-L%s' % layerIndex
-                )
-                print('[Interface] Collected thermal PBC equations for duplicate node layer %s (%s nodes).' % (layerIndex, len(layerNodes)))
-            print('------ Thermal PBC equations collected for keyword block: %s ------' % len(eqs))
-            print('------ Thermal PBC equation collection duration %.3f seconds ------' % (time.time() - thermal_setup_start))
+            # A tie makes every fibre-side node a dependent DOF, so periodic
+            # equations for that layer would eliminate the same DOF twice.  The
+            # tie already carries the fibre side with its matrix-side partner.
+            _interface_tied = [nm for nm in mdb.models[modelName].constraints.keys()
+                               if str(nm).startswith('ThermalSeam-')]
+            if _interface_tied:
+                print('[Interface] Interface tie present: the dependent layers follow the main '
+                      'layer, no separate periodic equations are added.')
+            else:
+                for layerIndex, layerNodes in enumerate(interfaceDuplicateLayers, start=1):
+                    _interface_add_thermal_layer_pbc(
+                        eqs, instanceName, layerNodes,
+                        (Max, May, Maz, Mnx, Mny, Mnz), meshsens,
+                        'InterfaceK-L%s' % layerIndex
+                    )
                 
         # temperature
         # Each temperature point is solved as an ISOTHERMAL state at the target
@@ -997,16 +1036,14 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
         if K11 == True or K22 == True or K33 == True:
             if onlyPBC:
                 _insert_equation_keywords(modelName, eqs)
-                print('------ Thermal keyword block setup duration %.3f seconds ------' % (time.time() - thermal_setup_start))
             else:
                 modelObj = mdb.models[modelName]
-                thermalJobName = '%s-job-thermal' % modelName
+                thermalJobName = '%s-job-thermal%s' % (modelName, _job_temperature_suffix(intemp, fntemp))
                 if thermalJobName in mdb.jobs.keys():
                     del mdb.jobs[thermalJobName]
                 _clear_thermal_analysis_features(modelObj)
                 _create_thermal_steps_and_bcs(modelObj, a, T_ref, delta_T)
                 _insert_equation_keywords(modelName, eqs)
-                print('------ Thermal keyword block setup duration before job submit %.3f seconds ------' % (time.time() - thermal_setup_start))
                 mdb.Job(name=thermalJobName, model=modelName, description='', type=ANALYSIS, atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', scratch='', multiprocessingMode=DEFAULT, numCpus=CPUs, numDomains=CPUs, numGPUs=1)
                 mdb.jobs[thermalJobName].submit(consistencyChecking=OFF)
                 mdb.jobs[thermalJobName].waitForCompletion()
@@ -1019,27 +1056,18 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
                     K11_value, K21_value, K31_value = _calculate_conductivity_from_step(
                         odb, upperName, 'K11', RVE_volume, delta_T / delta_x
                     )
-                    print(f'Effective thermal conductivity K11: {K11_value:.4f} W/(m·K)')
-                    print(f'Effective thermal conductivity K21: {K21_value:.4f} W/(m·K)')
-                    print(f'Effective thermal conductivity K31: {K31_value:.4f} W/(m·K)')
 
         ## Thermal conductivity K22 ##
         if K22 and not onlyPBC and odb is not None:
             K12_value, K22_value, K32_value = _calculate_conductivity_from_step(
                 odb, upperName, 'K22', RVE_volume, delta_T / delta_y
             )
-            print(f'Effective thermal conductivity K12: {K12_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K22: {K22_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K32: {K32_value:.4f} W/(m·K)')
 
         ## Thermal conductivity K33 ##
         if K33 and not onlyPBC and odb is not None:
             K13_value, K23_value, K33_value = _calculate_conductivity_from_step(
                 odb, upperName, 'K33', RVE_volume, delta_T / delta_z
             )
-            print(f'Effective thermal conductivity K13: {K13_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K23: {K23_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K33: {K33_value:.4f} W/(m·K)')
 
         if odb is not None:
             odb.close()

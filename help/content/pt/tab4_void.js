@@ -31,7 +31,7 @@ window.helpContent['pt/tab4_void'] = `
 É a fração volumétrica total dos vazios em relação ao volume do RVE
 inteiro. O plug-in distribuirá exatamente essa fração entre os vazios
 inseridos — não há um teto implícito além da viabilidade física (ou seja,
-não é possível pedir um Vf de vazios maior que o volume real de matriz que
+não é possível pedir um Vvoid maior que o volume real de matriz que
 sobrou após o posicionamento das fibras).</p>
 
 <h2>3.4.3 Void Distribution</h2>
@@ -119,13 +119,24 @@ ser exato com o espaço disponível):</p>
 </table>
 
 <div class="callout callout-note">
-  <div class="callout-title">O Vf total é sempre respeitado</div>
-  <p>Independente da prioridade, a fração volumétrica total de vazios
-  pedida é sempre preservada. Apenas o <em>formato da distribuição</em> e
-  o <em>tamanho por vazio</em> são negociáveis.</p>
+  <div class="callout-title">Vvoid é sempre respeitado</div>
+  <p>Independente da prioridade, a fração volumétrica de vazios pedida
+  <code>Vvoid</code> é o único alvo que nunca é relaxado: uma passagem final
+  de correção adiciona ou libera elementos de contorno, em qualquer vazio,
+  até o total ficar entre 99% e 101% do alvo. Apenas <em>w</em> e
+  <em>theta</em> são negociáveis. Se nem essa passagem alcançar a faixa,
+  porque o conjunto de elementos livres se esgotou, a tabela-resumo informa
+  isso em vez de relatar sucesso.</p>
 </div>
 
-<h2>3.4.6 Fator de Forma do Vazio (β)</h2>
+<h2>3.4.6 Fator de Forma do Vazio (β) — experimental</h2>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Recurso experimental em desenvolvimento</div>
+  <p>O fator de forma é um recurso de teste. Sua interface e seu
+  comportamento podem mudar, e as formas de vazio resultantes não foram
+  validadas. Deixe-o desativado em estudos de produção.</p>
+</div>
 
 <p>Por padrão, os vazios crescem com uma regra puramente baseada em distância
 e tendem a clusters aproximadamente esféricos. O fator opcional
@@ -180,7 +191,7 @@ numbers). "All Models" abrange todos os modelos com mesmo nome principal.</p>
   <li>Classifica cada elemento da matriz como <em>fiber-adjacent</em> ou
       <em>inter-matrix</em> (ver 3.4.3).</li>
   <li>Remove elementos da categoria apropriada para formar os vazios, até
-      atingir o Vf de vazios alvo.</li>
+      atingir o Vvoid alvo.</li>
   <li>Marca a região removida como Set <code>Set-Void</code> para inspeção
       no módulo Mesh do Abaqus.</li>
   <li>Atualiza as Section assignments para que a região vazia não tenha
@@ -189,10 +200,36 @@ numbers). "All Models" abrange todos os modelos com mesmo nome principal.</p>
       verificar se a distribuição obtida bate com os parâmetros pedidos.</li>
 </ol>
 
+<h3>O que é impresso na área de mensagens</h3>
+
+<p>A área de mensagens permanece curta, pois os números são gravados em disco
+de qualquer forma. Uma linha é impressa por modelo enquanto ele é processado e
+uma tabela-resumo ao final do lote:</p>
+
+<pre>Inserting voids into 5 models; target Vvoid = 5.0000%.
+  [1/5] RVE_..._Model_1: 12 void(s), Vvoid = 5.0132%, OK (34.2 s)
+  ...
+Void insertion summary: 5 models -- 4 within tolerance, 1 relaxed, 0 not met
+Target: Vvoid = 5.0000%, theta = 12, w = 0.500
+  model             voids  Vvoid (%)    dev (%)       w  time (s)  status
+  RVE_..._Model_1      12     5.0132    +0.0132   0.502      34.2  OK
+  RVE_..._Model_3      11     5.0410    +0.0410   0.480     151.7  relaxed: theta, w</pre>
+
+<p>A coluna <em>status</em> mostra <code>OK</code> quando todos os alvos foram
+atingidos dentro da tolerância estrita, <code>relaxed: theta, w</code> quando
+alguma tolerância precisou ser relaxada para convergir, e uma mensagem curta
+quando um alvo não pôde ser atingido. Uma mensagem sobre <code>Vvoid</code> tem
+sempre precedência, pois esse é o alvo que o plug-in deve cumprir. Uma comum é
+<code>w = 0.50 unreachable: every matrix element touches a fiber</code>, que
+aparece com fração volumétrica de fibra alta em malha grossa: não há elementos
+inter-matriz para alojar vazios, de modo que w fica fixo em 1 pela malha.
+Refine a malha ou use w = 1 nesses modelos. Os detalhes por modelo continuam na
+pasta de estatísticas abaixo.</p>
+
 <h3>Pasta de estatísticas gravada em disco</h3>
 
 <p>O plug-in cria uma pasta por execução, chamada
-<code>Void_Statistics_&lt;modelo&gt;_&lt;YYYYMMDD_HHMMSS&gt;</code>, no
+<code>Void_Statistics_&lt;modelo&gt;</code>, no
 diretório de trabalho do Abaqus. Conteúdo:</p>
 
 <table>
@@ -211,9 +248,10 @@ diretório de trabalho do Abaqus. Conteúdo:</p>
         similaridade do cosseno entre o eixo principal <code>e1</code> e o
         eixo X global da fibra.</td></tr>
     <tr><td><code>void_fiber_surface_breakdown.csv</code></td>
-        <td>Destruição de superfície por fibra: ID da fibra, perímetro
-        (proxy), nós de interface totais, nós quebrados e razão
-        <code>r_i = quebrados / total</code>.</td></tr>
+        <td>Destruição de superfície por fibra: ID da fibra, número de
+        faces de elemento na interface (também usado como proxy do
+        perímetro), número de faces rompidas e razão
+        <code>r_i = rompidas / total</code>.</td></tr>
     <tr><td><code>void_nn_distances.csv</code></td>
         <td>Distâncias ao 1º e 2º vizinhos mais próximos entre vazios.</td></tr>
     <tr><td><code>void_ripleys_k.csv</code></td>
@@ -230,7 +268,9 @@ diretório de trabalho do Abaqus. Conteúdo:</p>
 <p>Quando os centros das fibras estão disponíveis,
 <code>void_summary_report.txt</code> termina com cinco indicadores de
 concentração que descrevem o quanto os vazios romperam a interface
-fibra–matriz. Seja <code>r_i</code> a razão de nós quebrados na fibra
+fibra–matriz. Uma face de interface é a face compartilhada por um elemento
+de fibra e um elemento de matriz ou vazio; ela está rompida quando esse
+vizinho é um vazio. Seja <code>r_i</code> a razão de faces rompidas na fibra
 <code>i</code> e <code>N_f</code> o número total de fibras:</p>
 
 <table class="field-table">
@@ -240,8 +280,8 @@ fibra–matriz. Seja <code>r_i</code> a razão de nós quebrados na fibra
         <td>Fração de fibras com <em>qualquer</em> destruição
             (fibras com <code>r_i > 0</code> dividido por <code>N_f</code>).</td></tr>
     <tr><td><code>f_area</code></td>
-        <td>Razão global de área quebrada = soma dos nós quebrados /
-            soma dos nós de interface, em todas as fibras.</td></tr>
+        <td>Razão global de área rompida = soma das faces rompidas /
+            soma das faces de interface, em todas as fibras.</td></tr>
     <tr><td><code>r_avg_broken</code></td>
         <td>Média de <code>r_i</code> apenas sobre fibras afetadas.</td></tr>
     <tr><td><code>C_focus</code></td>

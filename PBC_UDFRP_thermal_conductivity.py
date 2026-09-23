@@ -6,6 +6,35 @@
 # periodic temperature boundary conditions. Returns the effective
 # conductivity tensor components K11/K22/K33 (and off-diagonals when needed).
 # Called from RVE_Builder_UDFRPs.Analysis when analysis_type == 5.
+#
+# -----------------------------------------------------------------------------
+# Based on EasyPBC Ver. 1.4 (08/10/2018, updated 27/08/2019).
+# Adapted for the "RVE Builder (UDFRPs)" Abaqus plug-in.
+# Modifications Copyright (C) 2026 Yuhao Meng.
+#
+# From EasyPBC:
+#      EasyPBC is an ABAQUS CAE plugin developed to estimate the homogenised
+#      effective elastic properties of user-defined representative volume
+#      elements.
+#      Copyright (C) 2018  Sadik Lafta Omairey
+#
+#      This program is free software: you can redistribute it and/or modify
+#      it under the terms of the GNU General Public License as published by
+#      the Free Software Foundation, either version 3 of the License, or
+#      (at your option) any later version.
+#
+#      This program is distributed in the hope that it will be useful,
+#      but WITHOUT ANY WARRANTY; without even the implied warranty of
+#      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#      GNU General Public License for more details.
+#
+#      You should have received a copy of the GNU General Public License
+#      along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#      Citation: Omairey S, Dunning P, Sriramula S (2018) Development of an
+#      ABAQUS plugin tool for periodic RVE homogenisation.
+#      Engineering with Computers. https://doi.org/10.1007/s00366-018-0616-4
+# -----------------------------------------------------------------------------
 ###############################################################################
 ## Importing ABAQUS Data and Python modules ##
 from abaqus import *
@@ -184,6 +213,36 @@ def _calculate_conductivity_from_step(odb, upperName, stepName, RVE_volume, temp
     return -q_avg_k1 / temp_gradient, -q_avg_k2 / temp_gradient, -q_avg_k3 / temp_gradient
 
 ## Plugin main GUI function ##
+
+
+def format_temperature_file_label(temperature_value):
+    """Filesystem-safe label such as Temp_025 or Temp_m050p5 (same convention as the kernel)."""
+    if temperature_value is None:
+        return ''
+    numeric_value = float(temperature_value)
+    sign_prefix = 'm' if numeric_value < 0.0 else ''
+    absolute_text = ('{:.6f}'.format(abs(numeric_value))).rstrip('0').rstrip('.')
+    if absolute_text == '':
+        absolute_text = '0'
+    if '.' in absolute_text:
+        integer_part, fractional_part = absolute_text.split('.', 1)
+        return 'Temp_{}{}p{}'.format(sign_prefix, integer_part.zfill(3), fractional_part)
+    return 'Temp_{}{}'.format(sign_prefix, absolute_text.zfill(3))
+
+def _job_temperature_suffix(intemp, fntemp=None):
+    """'_Temp_025' for a single temperature, '_Temp_025to100' for a ramp, '' if unknown.
+    Appended to job names so ODBs of different temperature points never overwrite each other."""
+    try:
+        lo = float(intemp)
+    except (TypeError, ValueError):
+        return ''
+    try:
+        hi = float(fntemp) if fntemp is not None else lo
+    except (TypeError, ValueError):
+        hi = lo
+    if abs(hi - lo) <= 1.0e-12:
+        return '_' + format_temperature_file_label(lo)
+    return '_' + format_temperature_file_label(lo) + 'to' + format_temperature_file_label(hi).replace('Temp_', '')
 
 def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
     import os
@@ -748,8 +807,6 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
                 fledge, bledge, bredge, fredge, ltedge, lbedge, rbedge,
                 rtedge, ftedge, btedge, bbedge, fbedge
             )
-            print('------ Thermal PBC equations collected for keyword block: %s ------' % len(eqs))
-            print('------ Thermal PBC equation collection duration %.3f seconds ------' % (time.time() - thermal_setup_start))
                 
         # temperature
         # Each temperature point is solved as an ISOTHERMAL state at the target
@@ -780,16 +837,14 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
         if K11 == True or K22 == True or K33 == True:
             if onlyPBC:
                 _insert_equation_keywords(modelName, eqs)
-                print('------ Thermal keyword block setup duration %.3f seconds ------' % (time.time() - thermal_setup_start))
             else:
                 modelObj = mdb.models[modelName]
-                thermalJobName = '%s-job-thermal' % modelName
+                thermalJobName = '%s-job-thermal%s' % (modelName, _job_temperature_suffix(intemp, fntemp))
                 if thermalJobName in mdb.jobs.keys():
                     del mdb.jobs[thermalJobName]
                 _clear_thermal_analysis_features(modelObj)
                 _create_thermal_steps_and_bcs(modelObj, a, T_ref, delta_T)
                 _insert_equation_keywords(modelName, eqs)
-                print('------ Thermal keyword block setup duration before job submit %.3f seconds ------' % (time.time() - thermal_setup_start))
                 mdb.Job(name=thermalJobName, model=modelName, description='', type=ANALYSIS, atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', scratch='', multiprocessingMode=DEFAULT, numCpus=CPUs, numDomains=CPUs, numGPUs=1)
                 mdb.jobs[thermalJobName].submit(consistencyChecking=OFF)
                 mdb.jobs[thermalJobName].waitForCompletion()
@@ -802,27 +857,18 @@ def feasypbc(part,inst,meshsens,K11,K22,K33,CPU,onlyPBC, intemp, fntemp):
                     K11_value, K21_value, K31_value = _calculate_conductivity_from_step(
                         odb, upperName, 'K11', RVE_volume, delta_T / delta_x
                     )
-                    print(f'Effective thermal conductivity K11: {K11_value:.4f} W/(m·K)')
-                    print(f'Effective thermal conductivity K21: {K21_value:.4f} W/(m·K)')
-                    print(f'Effective thermal conductivity K31: {K31_value:.4f} W/(m·K)')
 
         ## Thermal conductivity K22 ##
         if K22 and not onlyPBC and odb is not None:
             K12_value, K22_value, K32_value = _calculate_conductivity_from_step(
                 odb, upperName, 'K22', RVE_volume, delta_T / delta_y
             )
-            print(f'Effective thermal conductivity K12: {K12_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K22: {K22_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K32: {K32_value:.4f} W/(m·K)')
 
         ## Thermal conductivity K33 ##
         if K33 and not onlyPBC and odb is not None:
             K13_value, K23_value, K33_value = _calculate_conductivity_from_step(
                 odb, upperName, 'K33', RVE_volume, delta_T / delta_z
             )
-            print(f'Effective thermal conductivity K13: {K13_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K23: {K23_value:.4f} W/(m·K)')
-            print(f'Effective thermal conductivity K33: {K33_value:.4f} W/(m·K)')
 
         if odb is not None:
             odb.close()

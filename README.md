@@ -101,7 +101,6 @@ automatically selects the interface-aware variants
 | `Generate_UDFRPs_MonteCarlo.py` | Monte-Carlo fiber-coordinate generator |
 | `Generate_UDFRPs_RSE.py` | Random Sequential Expansion fiber-coordinate generator |
 | `PBC_UDFRP_*.py` | PBC homogenization analyzers (see table above) |
-| `PBC_UDFRP_Interface.py` | Builds COH3D8 cohesive seams for the Interface tab |
 | `help/` | Bundled multilingual help site (EN / PT / ZH), opened from the dialog |
 | `icon.png`, `*.png` | Plug-in icon and dialog diagrams |
 

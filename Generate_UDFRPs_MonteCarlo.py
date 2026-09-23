@@ -5,30 +5,51 @@
 # Generates 2D fiber-center coordinates for a UDFRP RVE using a Monte-Carlo
 # placement algorithm with a configurable safe distance. Imported by
 # RVE_Builder_UDFRPs.CreateRVE when algorithm == 1.
+#
+# -----------------------------------------------------------------------------
+# Part of the "RVE Builder (UDFRPs)" Abaqus/CAE plug-in.
+# Copyright (C) 2026 Yuhao Meng
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.  You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# The PBC homogenization kernels shipped with this plug-in are derived from
+# EasyPBC, Copyright (C) 2018 Sadik Lafta Omairey, distributed under the GNU
+# GPL; see the individual PBC_UDFRP_*.py files.
+# -----------------------------------------------------------------------------
 ###############################################################################
 """
+Generates 2D fibre-centre coordinates for a randomly distributed unidirectional
+continuous-fibre RVE by Monte-Carlo placement with rejection of overlaps.
 
-## Used to generate 2D coordinates for the randomly distributed uniaxial continuous fiber RVE model.
+* "volume fraction first" or "RVE size first" control (control_options)
+* l_safe: minimum surface-to-surface gap between any two fibres
+* BOUNDARY_CLEARANCE: keeps fibres away from RVE corners and thin edge slivers
+* writes the coordinates (with periodic images) to CSV
 
-## The code logic is based on the Monte Carlo algorithm.
-
-## Allows parameters to be fine-tuned according to the user's choice to ensure
-     "volume fraction first" or "RVE size first".      
-
-## "for python 3.0" .
-
-## Code author: Yuhao Meng
-
-## Refrence: 
-    
-## Thank you for using this code. 
-   If you refer to this code in your related work, please cite it accordingly.
-
+Author: Yuhao Meng (yuhaomeng@oceanica.ufrj.br)
 """
 
 from __future__ import division
 from __future__ import print_function
 import math, os, random, csv, time
+
+# Boundary clearance, as a fraction of the fibre radius.  A candidate fibre is
+# rejected when a corner of the RVE lies inside or within this clearance of
+# the fibre, or when the fibre crosses an RVE edge (or stops short of it) by
+# less than this clearance.  This avoids fibres that cover an RVE corner (the
+# geometry kernel cannot split such a fibre into four periodic parts) and the
+# thin slivers that make meshing fail.  Set it to 0.0 to disable the check.
+BOUNDARY_CLEARANCE = 0.1
+
 
 def Monte_Carlo_algorithm(Basefolder, vf, df, a, b, num_sets, l_safe, control_options):
     start_time = time.time()
@@ -55,29 +76,40 @@ def Monte_Carlo_algorithm(Basefolder, vf, df, a, b, num_sets, l_safe, control_op
         # Keep RVE size fixed, adjust vf accordingly
         area_fiber_total = N * area_fiber_single
         vf = (area_fiber_total / area_RVE) * 100
-        #print("Adjusted volume fraction to vf={}% to match the RVE size.".format(vf))
     
     # Create folder to save results
     folder_path = create_folder(Basefolder, vf, num_sets, N)
     
+    config_records = []          # one entry per saved configuration (for the check table)
+    config_start_time = time.time()
+    failed_draws = 0
     while success_count < num_sets:
         fibers, success = use_Monte_Carlo_CreateRVE(a, b, radius, N, l_safe)
         if success:
-            # Shift the fiber coordinates by a/2 and b/2
+            config_records.append({
+                'config': success_count + 1,
+                'fibers': len(fibers),
+                'vf': len(fibers) * area_fiber_single / area_RVE * 100.0,
+                'rerolls': failed_draws,
+                'time': time.time() - config_start_time,
+            })
+            config_start_time = time.time()
+            failed_draws = 0
+            # Shift the fiber coordinates by a/2 and b/2 and add the periodic
+            # copies of boundary fibres.  CalExpendCenter returns the original
+            # centre as well, so duplicates are filtered by coordinate.
             shifted_fibers = []
+            unique_coords = set()
             for fiber in fibers:
-                x_shifted = fiber[0] + a / 2.0
-                y_shifted = fiber[1] + b / 2.0
-                shifted_fiber = [x_shifted, y_shifted] + fiber[2:]
-                shifted_fibers.append(shifted_fiber)
-                # If fibres overlap the boundary, calculate and add periodic copies
+                centers = [(fiber[0], fiber[1])]
                 if fiber[3] != 'in':
-                    expanded_centers = CalExpendCenter(fiber, a, b)
-                    for ex_center in expanded_centers:
-                        ex_x_shifted = ex_center[0] + a / 2.0
-                        ex_y_shifted = ex_center[1] + b / 2.0
-                        shifted_fiber_expanded = [ex_x_shifted, ex_y_shifted] + fiber[2:]
-                        shifted_fibers.append(shifted_fiber_expanded)
+                    centers = CalExpendCenter(fiber, a, b)
+                for cx, cy in centers:
+                    coord = (cx + a / 2.0, cy + b / 2.0)
+                    if coord in unique_coords:
+                        continue
+                    unique_coords.add(coord)
+                    shifted_fibers.append([coord[0], coord[1]] + fiber[2:])
             
             circle_data.append(shifted_fibers)
             
@@ -85,14 +117,15 @@ def Monte_Carlo_algorithm(Basefolder, vf, df, a, b, num_sets, l_safe, control_op
             success_count += 1
             print(f"Successfully generated {success_count}/{num_sets} CSV files.\n")
         else:
-            print(f"Failed to generate set {success_count + 1}, retrying.")
+            failed_draws += 1       # retried silently; the count goes into the check table
 
         
     end_time = time.time()
     elapsed_time = end_time - start_time
     average_time_per_set = elapsed_time / num_sets
 
-    Output_Information(N, vf, df, a, b, l_safe, num_sets, average_time_per_set, elapsed_time, folder_path, control_options_name)
+    Output_Information(N, vf, df, a, b, l_safe, num_sets, average_time_per_set, elapsed_time, folder_path, control_options_name,
+                       config_records=config_records)
 
     # Info output
     print(' ')
@@ -156,9 +189,6 @@ def save_fiber_coordinates_to_csv(folder_path, fibers, N, success_count, a, b):
     csv_name = "RVE2D_{}Inclusions_IncCoordinates{:02d}.csv".format(N, success_count + 1)
     csv_path = os.path.join(folder_path, csv_name)
     # Write to CSV
-    #for python 2.7
-    #with open(csv_path, mode='wb') as file:
-    #for python 3.0
     with open(csv_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['X', 'Y'])
@@ -175,15 +205,42 @@ def use_Monte_Carlo_CreateRVE(a, b, radius, N, l_safe):
         y = random.uniform(-b / 2, b / 2)
         flag = ISoverreach(x, y, radius, a, b)
         new_fiber = [x, y, radius, flag]
+        if not boundary_clearance_ok(x + a / 2.0, y + b / 2.0, radius, a, b):
+            attempts += 1
+            continue
         if is_fiber_valid(new_fiber, a, b, radius) and not IsIntersectSelf(new_fiber, fiberList, a, b, radius, l_safe):
             fiberList.append(new_fiber)
         attempts += 1
 
     if len(fiberList) < N:
-        #print("Could not generate required number of fibers without overlap.")
         return fiberList, False
     else:
         return fiberList, True
+
+def boundary_clearance_ok(x, y, r, a, b, clearance=None):
+    """Return False when the fibre centred at (x, y) violates the boundary
+    clearance rule.  Coordinates are in the RVE frame [0, a] x [0, b].
+
+    * every RVE corner must stay at least r + h away from the centre (the
+      fibre must not cover or graze a corner);
+    * for every RVE edge the fibre must either cross it by at least h or stay
+      at least h away from it (no thin caps, no thin matrix strips),
+
+    where h = clearance * r (clearance defaults to BOUNDARY_CLEARANCE)."""
+    h = (BOUNDARY_CLEARANCE if clearance is None else clearance) * r
+    if h <= 0.0:
+        return True
+    # fast path: a fibre that stays at least h inside every edge passes
+    if r + h < x < a - r - h and r + h < y < b - r - h:
+        return True
+    for cx, cy in ((0.0, 0.0), (a, 0.0), (0.0, b), (a, b)):
+        if math.hypot(x - cx, y - cy) < r + h:
+            return False
+    for s in (x, a - x, y, b - y):
+        if r - h < abs(s) < r + h:
+            return False
+    return True
+
 
 def is_fiber_valid(fiber, a, b, radius):
     x, y, _, flag = fiber
@@ -290,14 +347,15 @@ def CalExpendCenter(fiber, a, b):
         return [(x, y)]
 
 
-def Output_Information(N, vf, df, a, b, l_safe, num_sets, average_time_per_set, elapsed_time, folder_path, control_options_name):
+def Output_Information(N, vf, df, a, b, l_safe, num_sets, average_time_per_set, elapsed_time, folder_path, control_options_name,
+                       config_records=None):
     txt_name = "RVE2D_parameters_output_Vf_{:03d}_xy_{}units_{}fiber.txt".format(int(vf + 0.5), num_sets, N)
     txt_save_path = os.path.join(folder_path, txt_name)
 
     with open(txt_save_path, "w") as file:
         file.write('Using the Monte Carlo algorithm, {} set(s) of random fiber circle center coordinate(s) is(are) successfully generated.\n'.format(num_sets))
         file.write('--------------------------------------------------------------------\n')
-        file.write('Fixed parameter: {}\n')
+        file.write('Fixed parameter: {}\n'.format(control_options_name))
         file.write('--------------------------------------------------------------------\n')
         file.write('User input parameters\n')
         file.write(' Volume Fraction of Fiber                         {:.4f}%\n'.format(vf))
@@ -312,3 +370,27 @@ def Output_Information(N, vf, df, a, b, l_safe, num_sets, average_time_per_set, 
         file.write('--------------------------------------------------------------------\n')
         file.write(" The folder containing the model information and the coordinates of {} set(s) of random fiber centers has been saved at:\n".format(num_sets))
         file.write("==> {}\n".format(folder_path))
+        file.write('--------------------------------------------------------------------\n')
+        file.write(" Files: RVE2D_{}Inclusions_IncCoordinatesXX.csv = fibre-centre coordinates of configuration XX\n".format(N))
+        if config_records:
+            write_config_check_table(file, config_records, N, vf, a, b)
+
+
+def write_config_check_table(file, config_records, N, target_vf, a, b):
+    """Per-configuration check: user input versus what was actually generated."""
+    file.write('--------------------------------------------------------------------\n')
+    file.write(' Per-configuration check (target vs. achieved)\n')
+    file.write('   target: {} fibres, Vf = {:.4f}%, RVE {:.6g} x {:.6g}\n'.format(N, target_vf, a, b))
+    file.write('   {:>6s} {:>8s} {:>12s} {:>10s} {:>13s} {:>9s}\n'.format(
+        'config', 'fibres', 'Vf achieved', 'Vf diff', 'failed draws', 'time (s)'))
+    n_short = 0
+    for rec in config_records:
+        flag = '' if rec['fibers'] == N else '   <-- short of N'
+        if rec['fibers'] != N:
+            n_short += 1
+        file.write('   {:>6d} {:>8d} {:>11.4f}% {:>+9.4f}% {:>13d} {:>9.2f}{}\n'.format(
+            rec['config'], rec['fibers'], rec['vf'], rec['vf'] - target_vf, rec['rerolls'], rec['time'], flag))
+    if n_short == 0:
+        file.write('   All {} configurations contain exactly {} fibres.\n'.format(len(config_records), N))
+    else:
+        file.write('   {} of {} configurations are short of {} fibres.\n'.format(n_short, len(config_records), N))

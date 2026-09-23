@@ -15,11 +15,31 @@
 #   * Analysis      — dispatch to the appropriate PBC_UDFRP_* analyzer for
 #                     elastic/CTE, viscoelastic, elastoplastic or thermal-
 #                     conductivity homogenization
+#
+# -----------------------------------------------------------------------------
+# Part of the "RVE Builder (UDFRPs)" Abaqus/CAE plug-in.
+# Copyright (C) 2026 Yuhao Meng
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.  You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# The PBC homogenization kernels shipped with this plug-in are derived from
+# EasyPBC, Copyright (C) 2018 Sadik Lafta Omairey, distributed under the GNU
+# GPL; see the individual PBC_UDFRP_*.py files.
+# -----------------------------------------------------------------------------
 ###############################################################################
 
-#Import Abaqus-related (Python) Object files ================================== 
-from abaqus import * 
-from abaqusConstants import * 
+#Import Abaqus-related (Python) Object files ==================================
+from abaqus import *
+from abaqusConstants import *
 from sketch import *
 from material import createMaterialFromDataString
 from collections import deque
@@ -28,20 +48,19 @@ import os
 import csv
 import math
 import random
-import sympy as sp
 import shutil
-import __main__ 
-import section 
-import regionToolset 
-import displayGroupMdbToolset as dgm 
-import step 
-import interaction 
-import load 
-import mesh 
-import job 
-import visualization 
-import xyPlot 
-import displayGroupOdbToolset as dgo 
+import __main__
+import section
+import regionToolset
+import displayGroupMdbToolset as dgm
+import step
+import interaction
+import load
+import mesh
+import job
+import visualization
+import xyPlot
+import displayGroupOdbToolset as dgo
 import connectorBehavior
 import re
 import sys
@@ -221,15 +240,6 @@ def ensure_output_path_is_safe(root_dir, subdirectory_name, sample_file_name):
     return absolute_path
 
 
-def build_case_output_subdirectory(model_name, analysis_name, case_label, temperature_value, timestamp_text):
-    name_parts = [sanitize_case_label(model_name), sanitize_case_label(analysis_name), sanitize_case_label(case_label)]
-    temperature_label = format_temperature_file_label(temperature_value)
-    if temperature_label != '':
-        name_parts.append(temperature_label)
-    name_parts.append(timestamp_text)
-    return '_'.join(name_parts)
-
-
 def run_callable_in_directory(work_directory, func, *args, **kwargs):
     """Run func inside work_directory, returning to cwd afterwards."""
     if work_directory is None:
@@ -319,7 +329,7 @@ def run_elastic_temperature_sweep(model_name, instance_name, meshsens, CPU,
                                   E11, E22, E33, G12, G13, G23,
                                   onlyPBC, temperature_points, umatName, feasypbc,
                                   result_timestamp, output_root_dir=None,
-                                  keep_all_outputs=False, case_label='Elastic'):
+                                  case_label='Elastic'):
     """Run feasypbc once per Celsius point; write per-point + aggregate CSVs."""
     temperature_points = validate_celsius_temperature_points(list(temperature_points or []), 'Elastic temperature point')
     if not temperature_points or onlyPBC:
@@ -334,13 +344,6 @@ def run_elastic_temperature_sweep(model_name, instance_name, meshsens, CPU,
 
     for temperature_value in temperature_points:
         work_directory = None
-        if keep_all_outputs:
-            subdir_name = build_case_output_subdirectory(model_name, 'Elastic', case_label, temperature_value, result_timestamp)
-            ensure_output_path_is_safe(
-                output_root_dir, subdir_name,
-                '{}_elastic_properties_{}_{}.csv'.format(model_name, format_temperature_file_label(temperature_value), result_timestamp)
-            )
-            work_directory = os.path.join(output_root_dir, subdir_name)
         run_callable_in_directory(
             work_directory,
             feasypbc,
@@ -359,7 +362,7 @@ def run_elastic_temperature_sweep(model_name, instance_name, meshsens, CPU,
         result_rows.append(row)
         per_temp_csv = os.path.join(
             result_directory,
-            '{}_elastic_properties_{}_{}.csv'.format(model_name, format_temperature_file_label(temperature_value), result_timestamp)
+            '{}_elastic_properties_{}.csv'.format(model_name, format_temperature_file_label(temperature_value))
         )
         write_single_row_csv(per_temp_csv, fieldnames, row)
 
@@ -373,7 +376,7 @@ def run_elastic_temperature_sweep(model_name, instance_name, meshsens, CPU,
 def run_thermal_temperature_sweep(model_name, instance_name, meshsens, CPU,
                                   K11, K22, K33, onlyPBC, temperature_points, feasypbc,
                                   result_timestamp, output_root_dir=None,
-                                  keep_all_outputs=False, case_label='ThermalConductivity'):
+                                  case_label='ThermalConductivity'):
     temperature_points = validate_celsius_temperature_points(list(temperature_points or []), 'Thermal temperature point')
     if not temperature_points or onlyPBC:
         return None
@@ -386,13 +389,6 @@ def run_thermal_temperature_sweep(model_name, instance_name, meshsens, CPU,
 
     for temperature_value in temperature_points:
         work_directory = None
-        if keep_all_outputs:
-            subdir_name = build_case_output_subdirectory(model_name, 'ThermalConductivity', case_label, temperature_value, result_timestamp)
-            ensure_output_path_is_safe(
-                output_root_dir, subdir_name,
-                '{}_thermal_properties_{}_{}.csv'.format(model_name, format_temperature_file_label(temperature_value), result_timestamp)
-            )
-            work_directory = os.path.join(output_root_dir, subdir_name)
         run_callable_in_directory(
             work_directory,
             feasypbc,
@@ -411,7 +407,7 @@ def run_thermal_temperature_sweep(model_name, instance_name, meshsens, CPU,
         result_rows.append(row)
         per_temp_csv = os.path.join(
             result_directory,
-            '{}_thermal_properties_{}_{}.csv'.format(model_name, format_temperature_file_label(temperature_value), result_timestamp)
+            '{}_thermal_properties_{}.csv'.format(model_name, format_temperature_file_label(temperature_value))
         )
         write_single_row_csv(per_temp_csv, fieldnames, row)
 
@@ -425,7 +421,7 @@ def run_thermal_temperature_sweep(model_name, instance_name, meshsens, CPU,
 ###############################################################################
 ################################# for Create RVE ##############################
 ###############################################################################
-def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_options,Basefolder, **kwargs):           
+def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_options,Basefolder, **kwargs):
     start_time_CreateRVE = time.time()
     ## Checking the validity of required parameters
     check_the_validity_of_required_parameters(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_options,Basefolder)
@@ -440,7 +436,7 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
     circle_data = None
     ## use for Print
     separator = "-" * 100
-    
+
     ## Select fiber coordinates generation method
     if algorithm == 1:  # Monte Carlo algorithm
         l_safe = kwargs.get('l_safe')
@@ -450,14 +446,14 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
             raise ValueError("Error: The 'Safe distance' must be a positive value!")
         if l_safe > math.sqrt(a**2 + b**2):
             raise ValueError("Error: The 'Safe distance' exceeds the diagonal length of the RVE!")
-        
+
         from Generate_UDFRPs_MonteCarlo import Monte_Carlo_algorithm
         circle_data = Monte_Carlo_algorithm(Basefolder, vf, df, a, b, file_suffix_range_Set, l_safe, control_options)
 
     elif algorithm == 2:  # RSE algorithm
         lmin = kwargs.get('lmin')
         lmax = kwargs.get('lmax')
-        
+
         if lmin is None:
             raise ValueError("Please provide a value for the 'Minimum distance between fibers' field!")
         if lmax is None:
@@ -469,20 +465,20 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
         if lmax <= 0.0:
             raise ValueError("Error: The 'Maximum distance' must be a positive value!")
         from Generate_UDFRPs_RSE import RSE_algorithm
-        
+
         circle_data = RSE_algorithm(Basefolder, vf, df, a, b, file_suffix_range_Set, lmax, lmin, control_options)
-        
+
     elif algorithm == 3:  # User coordinates files
         readcsv = kwargs.get('readcsv')
-        
+
         if readcsv:
             # Read the coordinates from the user-provided CSV files
             all_coordinates_per_file, file_count = read_coordinates_from_multiple_files(readcsv, file_suffix_range_Set)
-            
+
             # Check if the number of CSV files matches the expected number of models
             if file_count != file_suffix_range_Set:
                 raise ValueError("Error: Expected {} models, but only {} CSV file(s) were provided.".format(file_suffix_range_Set, file_count))
-            
+
             # Adjust the RVE size or volume fraction based on control options
             if control_options == 1:
                 scale_factor = math.sqrt(N * math.pi * (radius**2.0) / (vf * 0.01) / (a * b))
@@ -492,7 +488,7 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
             elif control_options == 2:
                 vf = (N * math.pi * (radius**2.0) / (a * b)) * 100
                 print("Volume fraction adjusted to vf = {:.4f}% to match the RVE size.".format(vf))
-            
+
             total_elapsed_time = 0
             for suffix in range(file_suffix_range_Set):
                 start_time_single_model_user = time.time()
@@ -501,7 +497,7 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
                     df_str = str(int(df))
                 else:
                     df_str = str(df).replace('.', '_')
-                
+
                 model_name = '{}_Df{}_Vf{:03d}_N{}_Model_{}'.format(myModel, df_str, int(vf + 0.5), N, suffix + 1)
                 mdb.Model(name=model_name)
                 model = mdb.models[model_name]
@@ -509,21 +505,21 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
                 Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all = create_sketch_and_extrude(model, radius, a, b, coordinates_for_this_model, full_circle_center, t)
                 assemble_and_merge(radius, a, b, model, full_circle_center, coordinates_for_this_model, t)
                 Set_findAt(model, full_circle_center, radius, t, coordinates_for_this_model, a, b, Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all)
-                
+
                 end_time_single_model_user = time.time()
                 elapsed_time_single_model_user = end_time_single_model_user - start_time_single_model_user
                 print("==> It took {:.04f} seconds to complete.".format(elapsed_time_single_model_user))
                 total_elapsed_time += elapsed_time_single_model_user
                 elapsed_time_single_model_user = 0
-            
+
             average_elapsed_time = total_elapsed_time / file_suffix_range_Set
             print("Successfully created {} models using User Coordinates files.".format(file_count))
-            
+
             if control_options == 1:
                 control_options_name = "vf"
             elif control_options == 2:
                 control_options_name = "RVE width and height"
-            
+
             ## Save information at txt
             txt_name = "RVE2D_parameters_output_Vf_{:03d}_xy_{}units_{}fiber.txt".format(int(vf + 0.5), file_suffix_range_Set, N)
             folder_name = "RVE_UDFibers{}_Vf{:03d}_xy_{}units_copy_user_files".format(N, int(vf + 0.5), file_suffix_range_Set)
@@ -566,14 +562,14 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
             print(' ')
         else:
             raise ValueError("No CSV file provided for User coordinates algorithm!")
-    
+
     elif algorithm == 0:
         raise ValueError("Please select a fibers random coordinates generation method!")
-    
+
     ## Ensure that circle_data is not None before proceeding
     if not circle_data and algorithm != 3:
         raise ValueError("Invalid coordinates data, failed to generate circle data!")
-    
+
     # Adjust the RVE size or volume fraction based on control options
     if control_options == 1:
         scale_factor = math.sqrt(N * math.pi * (radius**2.0) / (vf * 0.01) / (a * b))
@@ -583,21 +579,21 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
     elif control_options == 2:
         vf = (N * math.pi * (radius**2.0) / (a * b)) * 100
         print("Volume fraction adjusted to vf = {:.4f}% to match the RVE size.".format(vf))
-        
+
     ## main function of creating models for Monte Carlo and RSE
     if algorithm == 1 or algorithm == 2:
         for suffix in range(file_suffix_range_Set):
             start_time_single_model = time.time()
-            
+
             circles = circle_data[suffix]
             #circle_data_list = list(circle_data)
             #circles = circle_data_list[suffix]
-            
+
             if isinstance(df, float) and df.is_integer():
                 df_str = str(int(df))
             else:
                 df_str = str(df).replace('.', '_')
-            
+
             model_name = '{}_Df{}_Vf{:03d}_N{}_Model_{}'.format(myModel, df_str, int(vf), N, suffix + 1)
             mdb.Model(name=model_name)
             model = mdb.models[model_name]
@@ -606,22 +602,20 @@ def CreateRVE(myModel,file_suffix_range_Set,df,vf,a,b,t,algorithm,control_option
                 scale_factor = math.sqrt(N * math.pi * (radius**2.0) / (vf * 0.01) / (a * b))
                 a *= scale_factor
                 b *= scale_factor
-                #print("RVE dimensions adjusted to a = {}, b = {} to match the desired volume fraction.".format(a, b))
             elif control_options == 2:
                 vf = (N * math.pi * (radius**2.0) / (a * b)) * 100
-                #print("Volume fraction adjusted to vf = {:.4f}% to match the RVE size.".format(vf))
             full_circle_center = create_full_circle_inside(radius, a, b, circles)
-            Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all = create_sketch_and_extrude(model, radius, a, b, circles, full_circle_center, t) 
+            Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all = create_sketch_and_extrude(model, radius, a, b, circles, full_circle_center, t)
             assemble_and_merge(radius, a, b, model, full_circle_center, circles, t)
             Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all)
             end_time_single_model = time.time()
             elapsed_time_single_model = end_time_single_model - start_time_single_model
             print("==> It took {:.04f} seconds to complete.".format(elapsed_time_single_model))
-    
+
     end_time_CreateRVE = time.time()
     elapsed_time_CreateRVE = end_time_CreateRVE - start_time_CreateRVE
     average_time_CreateRVE = elapsed_time_CreateRVE / file_suffix_range_Set
-    
+
     print (separator)
     print (' ')
     print ("==> Number of RVE models generated:              {}".format(file_suffix_range_Set))
@@ -680,34 +674,11 @@ def check_the_validity_of_required_parameters(myModel,file_suffix_range_Set,df,v
         raise ValueError("Error: Please select an algorithm!")
     if vf < 0 or vf > max_vf:
         raise ValueError("Error: Volume fraction (vf) must be between 0 and {}% for {}".format(max_vf, algorithm_name))
-    
+
     return
 
 # Determine the coordinates of the center of the circle -----------------------
-def find_csv_files(base_folder, file_prefix, file_suffix_range):
-    csv_files = []
-    if not os.path.exists(base_folder):
-        raise ValueError("Base folder not found: {}".format(base_folder))
-    for suffix in file_suffix_range:
-        file_name = "{}{}.csv".format(file_prefix, suffix)
-        file_path = os.path.join(base_folder, file_name)
-        file_path = os.path.normpath(file_path)
-        ##print("Looking for file: {}".format(file_path))  
-        if os.path.exists(file_path):
-            csv_files.append((suffix, file_path))
-        else:
-            print("File not found: {}".format(file_path))  
-    return csv_files
 
-def extract_circle_data(base_folder, file_prefix, file_suffix_range):
-    circle_data = {}
-    csv_files = find_csv_files(base_folder, file_prefix, file_suffix_range)
-    for suffix, file_path in csv_files:
-        if suffix not in circle_data:
-            circle_data[suffix] = []
-        coordinates = read_coordinates_from_csv(file_path)
-        circle_data[suffix].extend(coordinates)
-    return circle_data
 
 # read csv file to get the cooedinates of fibers-------------------------------
 def read_coordinates_from_csv(file_path):
@@ -738,20 +709,17 @@ def read_coordinates_from_multiple_files(file_paths, file_suffix_range_Set):
             file_paths = file_paths.split(';')
         else:
             file_paths = [file_paths]
-    
+
     all_coordinates_per_file = []
     file_count = len(file_paths)
-    ##print("{} file(s) has/have been read.".format(file_count))
-    ##print("{} model(s) is/are being created".format(file_suffix_range_Set))
-    
+
     if file_count == file_suffix_range_Set:
         for file_path in file_paths:
-            ##print("Reading coordinates from file: {}".format(file_path))
             file_coordinates = read_coordinates_from_csv(file_path)
             all_coordinates_per_file.append(file_coordinates)
     else:
         raise ValueError("Error: The number of 'Select File' and 'Generate Model' are not equal!")
-    
+
     return all_coordinates_per_file, file_count
 
 # Use to Create Sketch --------------------------------------------------------
@@ -805,7 +773,7 @@ def calculate_intersections(radius, a, b, circles):
                 intersections_top_list.extend([x3, x4])                      # use to create Straightness for Matrix
             else:
                 pass
-    
+
     intersections_left_list = sorted(set(intersections_left_list))
     intersections_right_list = sorted(set(intersections_right_list))
     intersections_bottom_list = sorted(set(intersections_bottom_list))
@@ -816,10 +784,10 @@ def calculate_intersections(radius, a, b, circles):
         intersections_left_list, intersections_right_list = enforce_symmetry(intersections_left_list, intersections_right_list, effective_decimal)
     if len(intersections_bottom_list) == len(intersections_top_list):
         intersections_bottom_list, intersections_top_list = enforce_symmetry(intersections_bottom_list, intersections_top_list, effective_decimal)
-    
+
     all_intersections = ([(0, y) for y in intersections_left_list] + [(a, y) for y in intersections_right_list] +
                          [(x, 0) for x in intersections_bottom_list] + [(x, b) for x in intersections_top_list])
-    
+
     return all_intersections, intersections_left_list, intersections_right_list, intersections_bottom_list, intersections_top_list
 
 def enforce_symmetry(list1, list2, effective_decimal):
@@ -855,41 +823,55 @@ def calculate_arc_properties(p1, p2, center, radius, a, b):
         arc_length = 2*math.pi*radius - delta_angle * radius
         midpoint_angle = midpoint_angle + math.pi
         arc_midpoint = (center[0] + radius * math.cos(midpoint_angle), center[1] + radius * math.sin(midpoint_angle))
-    
+
     return arc_length, arc_midpoint, angle1, angle2
 
+def _circle_edge_hits(edge_name, cx, cy, r, a, b):
+    # Closed-form intersections of a circle with an axis-aligned rectangle edge
+    # line. Replaces the old sympy.solve() call (identical results, but ~1000x
+    # faster - sympy dominated the geometry-build time). Returns the real hits on
+    # the infinite edge line; the caller range-filters to the rectangle as before.
+    if edge_name == 'left':          # x = 0
+        d = r * r - cx * cx
+        if d >= 0.0:
+            s = math.sqrt(d); return [(0.0, cy + s), (0.0, cy - s)]
+    elif edge_name == 'right':       # x = a
+        d = r * r - (a - cx) * (a - cx)
+        if d >= 0.0:
+            s = math.sqrt(d); return [(a, cy + s), (a, cy - s)]
+    elif edge_name == 'bottom':      # y = 0
+        d = r * r - cy * cy
+        if d >= 0.0:
+            s = math.sqrt(d); return [(cx + s, 0.0), (cx - s, 0.0)]
+    elif edge_name == 'top':         # y = b
+        d = r * r - (b - cy) * (b - cy)
+        if d >= 0.0:
+            s = math.sqrt(d); return [(cx + s, b), (cx - s, b)]
+    return []
+
+
 def create_arc_segment(sketch, radius, a, b, circles):
-    #Define the four boundary equations of the rectangle
-    x, y = sp.symbols('x y')
-    left_edge = x - 0.0
-    right_edge = x - a
-    bottom_edge = y - 0.0
-    top_edge = y - b
-    
     effective_decimal = 14
     arcs = []
     arc_set = set()
     for center in circles:
         intersections = []
         unique_points = set()
-        circle_eq = (x - center[0])**2.0 + (y - center[1])**2.0 - radius**2.0
         # Process the four sides and calculate the intersection
-        edges = [('left', left_edge), ('right', right_edge), ('bottom', bottom_edge), ('top', top_edge)]
+        edges = ['left', 'right', 'bottom', 'top']
         if radius < center[0] < a - radius and radius < center[1] < b - radius:
             pass
         else:
-            for edge_name, edge_eq in edges:
-                solution = sp.solve([circle_eq, edge_eq], (x, y), dict=True)
-                for sol in solution:
-                    if sol[x].is_real and sol[y].is_real:
-                        real_x = round(float(sol[x].evalf()), effective_decimal)
-                        real_y = round(float(sol[y].evalf()), effective_decimal)
-                        # Check if the intersection point is within the rectangle
-                        if 0 <= real_x <= a + 1E-10 and 0 <= real_y <= b + 1E-10:
-                            real_sol = (real_x, real_y)
-                            if real_sol not in unique_points:
-                                unique_points.add(real_sol)
-                                intersections.append((real_sol, edge_name))
+            for edge_name in edges:
+                for (real_x, real_y) in _circle_edge_hits(edge_name, center[0], center[1], radius, a, b):
+                    real_x = round(real_x, effective_decimal)
+                    real_y = round(real_y, effective_decimal)
+                    # Check if the intersection point is within the rectangle
+                    if 0 <= real_x <= a + 1E-10 and 0 <= real_y <= b + 1E-10:
+                        real_sol = (real_x, real_y)
+                        if real_sol not in unique_points:
+                            unique_points.add(real_sol)
+                            intersections.append((real_sol, edge_name))
             # Processed according to the number of intersections
             if len(intersections) == 0:
                 pass
@@ -944,7 +926,7 @@ def create_arc_segment(sketch, radius, a, b, circles):
                             selected_arc = (center, pt2, pt1)
                     else:
                         selected_arc = (center, pt1, pt2)
-    
+
                 # Uniqueness detection: by checking whether a combination of the start and end points of an arc already exists
                 arc_id = (tuple(sorted([selected_arc[1], selected_arc[2]])))
                 if arc_id not in arc_set:
@@ -953,14 +935,13 @@ def create_arc_segment(sketch, radius, a, b, circles):
                     arc_data = (center, selected_arc[1], selected_arc[2], arc_length, Arc_midpoint)
                     arcs.append(arc_data)
                     arc_set.add(arc_id)
-                    
+
             elif len(intersections) == 4 and not check_if_near_corner(center, a, b, radius):
                 selected_arcs = process_corner_intersections(a, b, center, [pt for pt, edge in intersections], radius, arc_set)
                 arcs.extend(selected_arcs)
             elif len(intersections) == 4 and check_if_near_corner(center, a, b, radius):
                 selected_arcs = process_corner_intersections(a, b, center, [pt for pt, edge in intersections], radius, arc_set)
                 arcs.extend(selected_arcs)
-    #print(f"arcs,{arcs}")
     return arcs
 
 # Check that the center of the circle is close to the four vertices
@@ -980,7 +961,6 @@ def distance(point1, point2):
 
 # Deals with the case of being located at four corners with four intersections
 def process_corner_intersections(a, b, center, intersections, radius, arc_set):
-    ## print("a && b", a, b)
     left_points = [pt for pt in intersections if pt[0] == 0.0]
     right_points = [pt for pt in intersections if abs(a - pt[0]) <= 1E-4]
     bottom_points = [pt for pt in intersections if pt[1] == 0.0]
@@ -988,34 +968,24 @@ def process_corner_intersections(a, b, center, intersections, radius, arc_set):
     arcs = []
 
     # Print statements to check the filtered corner points
-    ##print("Left points:", left_points)
-    ##print("Right points:", right_points)
-    ##print("Bottom points:", bottom_points)
-    ##print("Top points:", top_points)
 
     # Lower left corner (0, 0)
     if left_points and bottom_points:
-        ##print("Processing lower left corner")
         arcs.extend(handle_single_corner(center, left_points, bottom_points, (0, 0), radius, arc_set, a, b, "left_bottom"))
-    
+
     # Upper left corner (0, b)
     if left_points and top_points:
-        ##print("Processing upper left corner")
         arcs.extend(handle_single_corner(center, left_points, top_points, (0, b), radius, arc_set, a, b, "left_top"))
-    
+
     # Lower right corner (a, 0)
     if right_points and bottom_points:
-        ##print("Processing lower right corner")
         arcs.extend(handle_single_corner(center, right_points, bottom_points, (a, 0), radius, arc_set, a, b, "right_bottom"))
-    
+
     # Upper right corner (a, b)
     if right_points and top_points:
-        ##print("Processing upper right corner")
         arcs.extend(handle_single_corner(center, right_points, top_points, (a, b), radius, arc_set, a, b, "right_top"))
 
-    # Print the final arcs for debugging
-    ##print("Generated arcs:", arcs)
-    
+
     return arcs
 
 # Handling individual corners, drawing arcs at near and far points
@@ -1030,11 +1000,6 @@ def handle_single_corner(center, points1, points2, corner, radius, arc_set, a, b
 
     return arcs
 
-def get_polar_angle(point, center):
-    dx = point[0] - center[0]
-    dy = point[1] - center[1]
-    angle = math.atan2(dy, dx)
-    return angle
 
 # Handling arcs and checking the size of the arcs
 def process_arc(center, pt1, pt2, radius, arc_set, corner, close_arc, corner_type, a, b):
@@ -1065,14 +1030,14 @@ def draw_Straightness_matrix(sketch, points, edge, a, b):
     decimal_places = 18
     points = sorted(points)
     midpoints_lengths_Matrix = []
-    
+
     if edge == 'left' or edge == 'right':
         start = 0.0
         end = float(b)
     elif edge == 'bottom' or edge == 'top':
         start = 0.0
         end = float(a)
-    
+
     if len(points) == 0:
         if edge == 'left':
             sketch.Line(point1=(0.0, start), point2=(0.0, end))
@@ -1181,20 +1146,16 @@ def draw_Straightness_Fiber(sketch, points, edge, a, b):
     if len(points) < 2:
         if edge == 'left':
             segment_length = b
-            ##print("fiber have no interections with left edge")
         if edge == 'right':
             segment_length = b
-            ##print("fiber have no interections with right edge")
         if edge == 'bottom':
             segment_length = a
-            ##print("fiber have no interections with bottom edge")
         if edge == 'top':
             segment_length = a
-            ##print("fiber have no interections with top edge")
     else:
         points = points
     for i in range(0, len(points), 2):
-        segment_length = points[i+1] - points[i]  
+        segment_length = points[i+1] - points[i]
         if edge == 'left':
             sketch.Line(point1=(0, points[i]), point2=(0, points[i+1]))
             mid_x = 0
@@ -1211,9 +1172,9 @@ def draw_Straightness_Fiber(sketch, points, edge, a, b):
             sketch.Line(point1=(points[i], b), point2=(points[i+1], b))
             mid_x = round(float((points[i] + points[i+1]) / 2), effective_decimal)
             mid_y = b
-            
+
         midpoints_lengths_Fiber.append(((mid_x, mid_y), segment_length))
-            
+
     return midpoints_lengths_Fiber
 
 # Create Curve ----------------------------------------------------------------
@@ -1222,16 +1183,14 @@ def create_full_circle_inside(radius, a, b, circles):
     for center in circles:
         if center[0] + radius <= a and center[1] + radius <= b and center[0] - radius >= 0 and center[1] - radius >= 0:
             full_circle_center_point.append(center)
-            ##print("Full circles need to be created")
         else:
-            ##print("No full circle inside")
             pass
     if full_circle_center_point:
-        ##print("full_circle_center_point")
         pass
     return full_circle_center_point
 
-# Create Sketch ---------------------------------------------------------------  
+# Create Sketch ---------------------------------------------------------------
+# Create Sketch ---------------------------------------------------------------
 def create_sketch_and_extrude(model, radius, a, b, circles, full_circle_center, t):
     midpoints_lengths_Matrix_all = []
     midpoints_lengths_Fiber_all = []
@@ -1240,75 +1199,61 @@ def create_sketch_and_extrude(model, radius, a, b, circles, full_circle_center, 
 # Create Matrix Sketch ========================================================
     # Create Viewport
     #Sketch RVE Rectangle for the matrix part
-    s1 = model.ConstrainedSketch(name='__profile__', sheetSize=100) 
-    s1.setPrimaryObject(option=STANDALONE) 
+    s1 = model.ConstrainedSketch(name='__profile__', sheetSize=100)
+    s1.setPrimaryObject(option=STANDALONE)
     # Create Straightness for Matrix ======================================
-    ##print("midpoints_lengths_Matrix_test")
     midpoints_lengths_Matrix_left = draw_Straightness_matrix(s1, intersections_left_list, 'left', a, b)
     midpoints_lengths_Matrix_right = draw_Straightness_matrix(s1, intersections_right_list, 'right', a, b)
     midpoints_lengths_Matrix_bottom = draw_Straightness_matrix(s1, intersections_bottom_list, 'bottom', a, b)
     midpoints_lengths_Matrix_top = draw_Straightness_matrix(s1, intersections_top_list, 'top', a, b)
     midpoints_lengths_Matrix_all = midpoints_lengths_Matrix_left + midpoints_lengths_Matrix_right + midpoints_lengths_Matrix_bottom + midpoints_lengths_Matrix_top
-    ##print("midpoints_lengths_Matrix_all", midpoints_lengths_Matrix_all)
     # Create Curve ========================================================
     # Create Circle: Center and Perimeter
     Arcs = create_arc_segment(s1, radius, a, b, circles)
-    ##print("full_circle_center", full_circle_center)
     if full_circle_center:
-        ##print("************create full circle inside*************")
         for value_full_circle_center in full_circle_center:
             s1.CircleByCenterPerimeter(center=(value_full_circle_center[0], value_full_circle_center[1]), point1=(value_full_circle_center[0] + radius, value_full_circle_center[1]))
-            ##print("==========Draw Circle full inside Successful=============")
     # Create Arc: Center and 2 Endpoints
     if Arcs:
-        ##print("************create Curve in the Sketch of Matrix*************")
         for arc in Arcs:
-            ##print("==> arc:", arc)
             s1.ArcByCenterEnds(center=(arc[0][0], arc[0][1]), point1=arc[1], point2=arc[2], direction=COUNTERCLOCKWISE)
-            ##print("==========Draw Arc Successful=============")
     # Name the part model and associate it
-    p = model.Part(name='Matrix', dimensionality=THREE_D, type=DEFORMABLE_BODY) 
+    p = model.Part(name='Matrix', dimensionality=THREE_D, type=DEFORMABLE_BODY)
     p = model.parts['Matrix']
     # Matrix Extrusion
-    p.BaseSolidExtrude(sketch=s1, depth=t) 
-    s1.unsetPrimaryObject() 
-    p = model.parts['Matrix'] 
-    del model.sketches['__profile__'] 
+    p.BaseSolidExtrude(sketch=s1, depth=t)
+    s1.unsetPrimaryObject()
+    p = model.parts['Matrix']
+    del model.sketches['__profile__']
     new_part = len(p.cells)
 # Create Unidirectional Fiber Sketch ==========================================
-    #Create Viewport
-    s2 = model.ConstrainedSketch(name='__profile__', sheetSize=100) 
-    s2.setPrimaryObject(option=STANDALONE) 
-    # Create Straightness for Fiber =======================================
+    s2 = model.ConstrainedSketch(name='__profile__', sheetSize=100)
+    s2.setPrimaryObject(option=STANDALONE)
+    # Create Straightness for Fiber ===================================
     midpoints_lengths_Fiber_left = draw_Straightness_Fiber(s2, intersections_left_list, 'left', a, b)
     midpoints_lengths_Fiber_right = draw_Straightness_Fiber(s2, intersections_right_list, 'right', a, b)
     midpoints_lengths_Fiber_bottom = draw_Straightness_Fiber(s2, intersections_bottom_list, 'bottom', a, b)
     midpoints_lengths_Fiber_top = draw_Straightness_Fiber(s2, intersections_top_list, 'top', a, b)
     midpoints_lengths_Fiber_all = midpoints_lengths_Fiber_left + midpoints_lengths_Fiber_right + midpoints_lengths_Fiber_bottom + midpoints_lengths_Fiber_top
-    ##print("midpoints_lengths_Fiber_all", midpoints_lengths_Fiber_all)
-    # Create Curve ========================================================
+    # Create Curve ====================================================
     # Create Circle: Center and Perimeter
     if full_circle_center:
-        ##print("create full circle inside", full_circle_center)
         for value_full_circle_center in full_circle_center:
-            ##print("value_full_circle_center", value_full_circle_center)
-            s2.CircleByCenterPerimeter(center=(value_full_circle_center[0], value_full_circle_center[1]), point1=(value_full_circle_center[0] + radius, value_full_circle_center[1]))
+            cx, cy = value_full_circle_center[0], value_full_circle_center[1]
+            s2.CircleByCenterPerimeter(center=(cx, cy), point1=(cx + radius, cy))
     # Create Arc: Center and 2 Endpoints
     Arcs = create_arc_segment(s2, radius, a, b, circles)
     if Arcs:
-        ##print("create Curve in the Sketch of Matrix", Arcs)
         for arc in Arcs:
             s2.ArcByCenterEnds(center=(arc[0][0], arc[0][1]), point1=arc[1], point2=arc[2], direction=COUNTERCLOCKWISE)
     # Name the part model and associate it
-    p = model.Part(name='Fiber', dimensionality=THREE_D, type=DEFORMABLE_BODY) 
-    p = model.parts['Fiber'] 
-    # Fibre Extrusion
-    p.BaseSolidExtrude(sketch=s2, depth=t) 
-    s2.unsetPrimaryObject() 
+    p = model.Part(name='Fiber', dimensionality=THREE_D, type=DEFORMABLE_BODY)
     p = model.parts['Fiber']
+    # Fibre Extrusion
+    p.BaseSolidExtrude(sketch=s2, depth=t)
+    s2.unsetPrimaryObject()
     del model.sketches['__profile__']
-    
-    ##print(f"Arcs in Create Sketch,{Arcs}")
+
     return Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all
 
 # Assembly and Merge the Matrix-Part and Fiber-Part ---------------------------
@@ -1322,8 +1267,8 @@ def assemble_and_merge(radius, a, b, model, full_circle_center, circles, t):
     a.InstanceFromBooleanMerge(name='UDComposite', instances=(a.instances['Fiber-1'], a.instances['Matrix-1']), keepIntersections=ON, originalInstances=SUPPRESS, domain=GEOMETRY)
     del a.features['Fiber-1']
     del a.features['Matrix-1']
-    
-    p = model.parts['UDComposite'] 
+
+    p = model.parts['UDComposite']
     session.viewports['Viewport: 1'].setValues(displayedObject=p)
 
 # Converts coordinates from 2D to 3D for subsequent meshing modules
@@ -1334,116 +1279,126 @@ def set_to_mesh(t, circles, radius, a, b):
     all_intersections_2D_set = set(all_intersections_2D)
     vertices_set = set(vertices)
     all_intersections_2D = list(all_intersections_2D_set.union(vertices_set))
-    
+
     # change from 2D intersections to 3D --------------------------------------
     all_intersections_3D_norotation = [(x, y, 0) for (x, y) in all_intersections_2D]
     all_intersections_3D = [(t/2, y, -x) for (x, y, z) in all_intersections_3D_norotation]
-    ##print("all_intersections_2D", all_intersections_2D)
     # combine all 3D points which are used for findAt -------------------------
     set_z_points = all_intersections_3D
-    ##print("set_z_points", set_z_points)
-    
+
     return set_z_points
 
-# Create collections for subsequent meshing modules
-def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all):
-    # use for seeds
-    pickedEdges_Arc = []
-    pickedEdges_full_circle = []
-    pickedEdges_thickness_Straightness = []
-    pickedEdges_Matrix_Straightness = []
-    pickedEdges_Fiber_Straightness = []
-    
-    # use for interface
-    pickedFaces_Arc = []
-    pickedFaces_full_circle = []
-    
-    p = model.parts['UDComposite']
+# Cell classification for Set-Fiber / Set-Matrix ------------------------------
+def _classify_cells_by_geometry(p, circles, radius):
+    """Split the cells of the merged part into fibre and matrix cells by
+    geometry instead of by cell order.
+
+    The sketch point (x2d, y2d) ends up at (t/2, y2d, -x2d) in the part frame
+    after the 90-degree rotation in assemble_and_merge, so a point inside a
+    cell belongs to a fibre when (-z, y) lies within `radius` of one of the
+    fibre centres (periodic images included).  This is independent of the
+    order in which Abaqus numbers the cells after the Boolean merge, which is
+    what made the old index-based rule fail for fibres cut by an RVE corner.
+    """
+    r2 = radius * radius
+    fiber_cells = None
+    matrix_cells = None
+    for cell in p.cells:
+        point = cell.pointOn
+        if len(point) == 1 and hasattr(point[0], '__len__'):
+            point = point[0]
+        x2d, y2d = -float(point[2]), float(point[1])
+        inside = False
+        for c in circles:
+            if (x2d - c[0]) ** 2 + (y2d - c[1]) ** 2 < r2:
+                inside = True
+                break
+        one = p.cells[cell.index:cell.index + 1]
+        if inside:
+            fiber_cells = one if fiber_cells is None else fiber_cells + one
+        else:
+            matrix_cells = one if matrix_cells is None else matrix_cells + one
+    if fiber_cells is None or matrix_cells is None:
+        raise ValueError('geometric cell classification found no fibre or no matrix cell')
+    return fiber_cells, matrix_cells
+
+
+def _cell_order_sets(model, p, circles, full_circle_center, radius, a, b, new_part):
+    """Fallback: Set-Fiber / Set-Matrix from the cell order of the merged part
+    (fibre cells first, then the matrix cells)."""
     total_fibers = len(circles)
-    ##print("total fibers", total_fibers)
-    # create Set-Fiber and Set-Matrix
+
     if new_part == 1:
         p.Set(cells=p.cells[0: total_fibers], name='Set-Fiber')
         p.Set(cells=p.cells[total_fibers: total_fibers + new_part], name='Set-Matrix')
-    
-    elif new_part == 2:  
-        ##print("Processing new_part == 2")
+
+    elif new_part == 2:
         part_Fiber = model.parts["Fiber"]
         points = [(0, 0), (0, b), (a, 0), (a, b)]
         cell_masks = []
         On_Fiber_point = []
         corner_id = []
         find_circle_outside_corner = False
-        ''' This strategy is required when and only when the fiber is close to (0,0). ''' 
+        ''' This strategy is required when and only when the fiber is close to (0,0). '''
         for circle in circles:
             if circle not in full_circle_center:
                 try:
-                    ##print("Processing circle: {}".format(circle))
                     if circle[0] < 0 and circle[1] < 0:
-                        find_point_x = (radius / (2 * math.sqrt(circle[0]**2 + circle[1]**2)) - 0.5) * abs(circle[0]) 
-                        find_point_y = (radius / (2 * math.sqrt(circle[0]**2 + circle[1]**2)) - 0.5) * abs(circle[1]) 
+                        find_point_x = (radius / (2 * math.sqrt(circle[0]**2 + circle[1]**2)) - 0.5) * abs(circle[0])
+                        find_point_y = (radius / (2 * math.sqrt(circle[0]**2 + circle[1]**2)) - 0.5) * abs(circle[1])
                         find_point = (find_point_x, find_point_y)
-                        ##print("Find point near (0,0):  {find_point}")
                         On_Fiber_point.append(find_point)
                         corner_id = 0                      ## left bottom
                         find_circle_outside_corner = True
                         break
                     elif circle[0] < 0 and circle[1] > b:
-                        find_point_x = (radius / (2 * math.sqrt(circle[0]**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[0]) 
-                        find_point_y = b - (radius / (2 * math.sqrt(circle[0]**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[1] - b) 
+                        find_point_x = (radius / (2 * math.sqrt(circle[0]**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[0])
+                        find_point_y = b - (radius / (2 * math.sqrt(circle[0]**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[1] - b)
                         find_point = (find_point_x, find_point_y)
-                        ##print("Find point near (0,b): {find_point}")
                         On_Fiber_point.append(find_point)
                         corner_id = 1                      ## left top
                         find_circle_outside_corner = True
                         break
                     elif circle[0] > a and circle[1] < 0:
-                        find_point_x = a - (radius / (2 * math.sqrt((circle[0] - a)**2 + circle[1]**2)) - 0.5) * abs(circle[0] - a) 
-                        find_point_y = (radius / (2 * math.sqrt((circle[0] - a)**2 + circle[1]**2)) - 0.5) * abs(circle[1]) 
+                        find_point_x = a - (radius / (2 * math.sqrt((circle[0] - a)**2 + circle[1]**2)) - 0.5) * abs(circle[0] - a)
+                        find_point_y = (radius / (2 * math.sqrt((circle[0] - a)**2 + circle[1]**2)) - 0.5) * abs(circle[1])
                         find_point = (find_point_x, find_point_y)
-                        ##print("Find point near (a,0): {find_point}")
                         On_Fiber_point.append(find_point)
                         corner_id = 2                      ## right bottom
                         find_circle_outside_corner = True
                         break
                     elif circle[0] > a and circle[1] > b:
-                        find_point_x = a - (radius / (2 * math.sqrt((circle[0] - a)**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[0] - a) 
-                        find_point_y = b - (radius / (2 * math.sqrt((circle[0] - a)**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[1] - b) 
+                        find_point_x = a - (radius / (2 * math.sqrt((circle[0] - a)**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[0] - a)
+                        find_point_y = b - (radius / (2 * math.sqrt((circle[0] - a)**2 + (circle[1] - b)**2)) - 0.5) * abs(circle[1] - b)
                         find_point = (find_point_x, find_point_y)
-                        ##print(f"Find point near (a,b): {find_point}")
                         On_Fiber_point.append(find_point)
                         corner_id = 3                      ## right top
                         find_circle_outside_corner = True
                         break
-                    
+
                 except Exception as e:
                     print("Error processing circle {}: {}".format(circle, e))
                     find_circle_outside_corner = False
-            
+
         if On_Fiber_point:
-            ##print("On_Fiber_point found: {}".format(On_Fiber_point))
             for point in On_Fiber_point:
                 try:
-                    ##print("Finding cell at point: {}".format(point))
                     cell = part_Fiber.cells.findAt(((point[0], point[1], 0),))
                     cell_real = p.cells.findAt(((0, point[1], -point[0]),))
                     cell_masks.append(cell_real.getMask())
                 except Exception as e:
                     print("Error finding cell at point {}: {}".format(point, e))
                     continue
-        
+
         numeric_cell_indices = []
         if cell_masks:
             for mask in cell_masks:
                 cells_from_mask = p.cells.getSequenceFromMask(mask=mask)
                 numeric_cell_indices.extend([cell.index for cell in cells_from_mask])
-            
-            ##print("Numeric cell indices: {}".format(numeric_cell_indices))
+
             min_cell_index = min(numeric_cell_indices)
-            ##print("Minimum cell index: {}".format(min_cell_index))
-        
+
         if find_circle_outside_corner:
-            ##print("Executing method 1")
             if corner_id == 0:  ## left bottom
                 p.Set(cells=p.cells[0: min_cell_index + 1] + p.cells[min_cell_index + 2: total_fibers + 1], name='Set-Fiber')
                 p.Set(cells=p.cells[min_cell_index + 1: min_cell_index + 2] + p.cells[total_fibers + 1: total_fibers + 2], name='Set-Matrix')
@@ -1451,11 +1406,10 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
                 p.Set(cells=p.cells[0: total_fibers], name='Set-Fiber')
                 p.Set(cells=p.cells[total_fibers: total_fibers + new_part], name='Set-Matrix')
         else:
-            ##print("Executing method 2")
             p.Set(cells=p.cells[0: total_fibers], name='Set-Fiber')
             p.Set(cells=p.cells[total_fibers: total_fibers + new_part], name='Set-Matrix')
 
-    
+
     elif new_part == 3:
         part_Fiber = model.parts["Fiber"]
         points = [(0, 0), (0, b), (a, 0), (a, b)]
@@ -1468,19 +1422,46 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
             except:
                 cell_real = p.cells.findAt(((0, point[1], -point[0]),))
                 cell_masks.append(cell_real.getMask())
-        
+
         numeric_cell_indices = []
         if cell_masks:
             for mask in cell_masks:
                 cells_from_mask = p.cells.getSequenceFromMask(mask=mask)
                 numeric_cell_indices.extend([cell.index for cell in cells_from_mask])
-        
+
             min_cell_index = min(numeric_cell_indices)
-            ##print("min_cell_index", min_cell_index)
             if no_corners_on_Fiber:
                 p.Set(cells=p.cells[0: min_cell_index] + p.cells[min_cell_index + 1: total_fibers + 1], name='Set-Fiber')
                 p.Set(cells=p.cells[min_cell_index: min_cell_index + 1] + p.cells[total_fibers + 1: total_fibers + 3], name='Set-Matrix')
-        
+
+
+# Create collections for subsequent meshing modules
+def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_part, midpoints_lengths_Matrix_all, midpoints_lengths_Fiber_all):
+    # use for seeds
+    pickedEdges_Arc = []
+    pickedEdges_full_circle = []
+    pickedEdges_thickness_Straightness = []
+    pickedEdges_Matrix_Straightness = []
+    pickedEdges_Fiber_Straightness = []
+
+    # use for interface
+    pickedFaces_Arc = []
+    pickedFaces_full_circle = []
+
+    p = model.parts['UDComposite']
+    # create Set-Fiber and Set-Matrix
+    total_fibers = len(circles)
+    try:
+        fiber_cells, matrix_cells = _classify_cells_by_geometry(p, circles, radius)
+        if len(fiber_cells) != total_fibers:
+            print('Warning: {} fibre cells were classified for {} fibre circles; '
+                  'please check Set-Fiber and Set-Matrix in the model.'.format(len(fiber_cells), total_fibers))
+        p.Set(cells=fiber_cells, name='Set-Fiber')
+        p.Set(cells=matrix_cells, name='Set-Matrix')
+    except Exception as exc:
+        print('Geometric cell classification failed ({}); falling back to cell order.'.format(exc))
+        _cell_order_sets(model, p, circles, full_circle_center, radius, a, b, new_part)
+
     ## Create Set-thickness-Straightness
     set_z_points = set_to_mesh(t, circles, radius, a, b)
     # use findAt to get all edges on z-axial
@@ -1489,115 +1470,29 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
     # deal with others element
     for point in set_z_points[1:]:
         pickedEdges_thickness_Straightness += p.edges.findAt((point,))
-    
+
     p.Set(edges=pickedEdges_thickness_Straightness, name='Set-thickness-Straightness')
-    
-    ## Create Set-Matrix-Straightness
-    # deal with the first element
-    pickedEdges_Matrix_Straightness = p.edges.findAt(((t, midpoints_lengths_Matrix_all[0][0][1], -midpoints_lengths_Matrix_all[0][0][0]),))
-    pickedEdges = p.edges.findAt(((0, midpoints_lengths_Matrix_all[0][0][1], -midpoints_lengths_Matrix_all[0][0][0]),))
-    pickedEdges_Matrix_Straightness += pickedEdges
-    # deal with others element
-    for midpoint, seg_length in midpoints_lengths_Matrix_all[1:]:
-        pickedEdges = p.edges.findAt(((t, midpoint[1], -midpoint[0]),))
-        pickedEdges_Matrix_Straightness += pickedEdges
-        pickedEdges = p.edges.findAt(((0, midpoint[1], -midpoint[0]),))
-        pickedEdges_Matrix_Straightness += pickedEdges
-    p.Set(edges=pickedEdges_Matrix_Straightness, name='Set-Matrix-Straightness')
-            
-    
-    # initialization
-    pickedEdges = None
-    
-    ## Create Set-Fiber-Straightness
-    # deal with the first element
-    pickedEdges_Fiber_Straightness = p.edges.findAt(((t, midpoints_lengths_Fiber_all[0][0][1], -midpoints_lengths_Fiber_all[0][0][0]),))
-    pickedEdges = p.edges.findAt(((0, midpoints_lengths_Fiber_all[0][0][1], -midpoints_lengths_Fiber_all[0][0][0]),))
-    pickedEdges_Fiber_Straightness += pickedEdges
-    # deal with others element
-    for midpoint, seg_length in midpoints_lengths_Fiber_all[1:]:
-        pickedEdges = p.edges.findAt(((t, midpoint[1], -midpoint[0]),))
-        pickedEdges_Fiber_Straightness += pickedEdges
-        pickedEdges = p.edges.findAt(((0, midpoint[1], -midpoint[0]),))
-        pickedEdges_Fiber_Straightness += pickedEdges
-    p.Set(edges=pickedEdges_Fiber_Straightness, name='Set-Fiber-Straightness')
-    
-    # initialization
-    pickedEdges = None
-    
-    ## Create Set-Arc
-    if Arcs:
-        ##print(f"Arcs in FindAt,{Arcs}")
-        # deal with the first element
-        pickedEdges_Arc = p.edges.findAt(((0.0, Arcs[0][4][1], -Arcs[0][4][0]),))
-        pickedEdges = p.edges.findAt(((t, Arcs[0][4][1], -Arcs[0][4][0]),))
-        pickedEdges_Arc += pickedEdges
-        # deal with others element
-        for center, intersection_start, intersection_end, arc_length, Arc_midpoint_2D in Arcs[1:]:
-            pickedEdges = p.edges.findAt(((0.0, Arc_midpoint_2D[1], -Arc_midpoint_2D[0]),))
-            pickedEdges_Arc += pickedEdges
-            pickedEdges = p.edges.findAt(((t, Arc_midpoint_2D[1], -Arc_midpoint_2D[0]),))
-            pickedEdges_Arc += pickedEdges
-        p.Set(edges=pickedEdges_Arc, name='Set-Arc')
-        
-    ## Create Set-Interface-Arc
-        # deal with the first element
-        pickedFaces_Arc = p.faces.findAt(((t/2, Arcs[0][4][1], -Arcs[0][4][0]),))
-        pickedFaces = p.faces.findAt(((t/2, Arcs[0][4][1], -Arcs[0][4][0]),))
-        pickedFaces_Arc += pickedFaces
-        # deal with others element
-        for center, intersection_start, intersection_end, arc_length, Arc_midpoint_2D, in Arcs[1:]:
-            pickedFaces = p.faces.findAt(((t/2, Arc_midpoint_2D[1], -Arc_midpoint_2D[0]),))
-            pickedFaces_Arc += pickedFaces
-        
-        p.Set(faces=pickedFaces_Arc, name='Set-Interface-Arc')
-    
-    ## Create Set-full-circle
-    if full_circle_center:
-        # deal with the first element
-        value_full_circle_center = full_circle_center[0]
-        point1 = (0.0, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-        point2 = (t, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-        pickedEdges_full_circle = p.edges.findAt((point1,), (point2,))
-        # deal with others element
-        for value_full_circle_center in full_circle_center[1:]:
-            point1 = (0.0, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-            point2 = (t, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-            pickedEdges_full_circle += p.edges.findAt((point1,), (point2,))
-        
-        p.Set(edges=pickedEdges_full_circle, name='Set-full-circle')
-        
-    ## Create Set-Interface-full-circle
-        # deal with the first element
-        value_full_circle_center = full_circle_center[0]
-        pointOnInterface_full_circle = (t/2, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-        pickedFaces_full_circle = p.faces.findAt((pointOnInterface_full_circle,))
-        # deal with others element
-        for value_full_circle_center in full_circle_center[1:]:
-            pointOnInterface_full_circle = (t/2, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-            pickedFaces_full_circle += p.faces.findAt((pointOnInterface_full_circle,))
-        p.Set(faces=pickedFaces_full_circle, name='Set-Interface-full-circle')
 
     # use for seeds
     pickedEdges_Arc = []
     pickedEdges_full_circle = []
     pickedEdges_thickness_Straightness = []
-    
+
     pickedEdges_Matrix_Straightness = []
     pickedEdges_Matrix_Straightness_vertical = []
     pickedEdges_Matrix_Straightness_horizontal = []
-    
+
     pickedEdges_Fiber_Straightness = []
     pickedEdges_Fiber_Straightness_vertical = []
     pickedEdges_Fiber_Straightness_horizontal = []
-    
+
     # use for interface
     pickedFaces_Arc = []
     pickedFaces_full_circle = []
-    
+
     p = model.parts['UDComposite']
     total_fibers = len(circles)
-    
+
     ## Create Set-Matrix-Straightness
     midpoints_vertical = []
     midpoints_horizontal = []
@@ -1607,7 +1502,7 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
             midpoints_vertical.append(midpoint)
         if midpoint[1] == 0 or midpoint[1] == b:
             midpoints_horizontal.append(midpoint)
-    
+
     if midpoints_vertical:
         pickedEdges_Matrix_Straightness_vertical = p.edges.findAt(((t, midpoints_vertical[0][1], -midpoints_vertical[0][0]),))
         pickedEdges_vertical = p.edges.findAt(((0, midpoints_vertical[0][1], -midpoints_vertical[0][0]),))
@@ -1617,7 +1512,7 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
             pickedEdges_Matrix_Straightness_vertical += pickedEdges_vertical
             pickedEdges_vertical = p.edges.findAt(((0, midpoint[1], -midpoint[0]),))
             pickedEdges_Matrix_Straightness_vertical += pickedEdges_vertical
-        
+
         p.Set(edges=pickedEdges_Matrix_Straightness_vertical, name='Set-Matrix-Straightness-vertical')
 
     if midpoints_horizontal:
@@ -1629,19 +1524,19 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
             pickedEdges_Matrix_Straightness_horizontal += pickedEdges_horizontal
             pickedEdges_horizontal = p.edges.findAt(((0, midpoint[1], -midpoint[0]),))
             pickedEdges_Matrix_Straightness_horizontal += pickedEdges_horizontal
-        
+
         p.Set(edges=pickedEdges_Matrix_Straightness_horizontal, name='Set-Matrix-Straightness-horizontal')
-    
+
     pickedEdges_Matrix_Straightness = pickedEdges_Matrix_Straightness_vertical + pickedEdges_Matrix_Straightness_horizontal
     p.Set(edges=pickedEdges_Matrix_Straightness, name='Set-Matrix-Straightness')
-    
+
     # initialization
     pickedEdges = None
     pickedEdges_vertical = None
     pickedEdges_horizontal = None
     midpoints_Fiber_vertical = []
     midpoints_Fiber_horizontal = []
-    
+
     # Create Set-Fiber-Straightness
     if Arcs:
         for midpoint, seg_length in midpoints_lengths_Fiber_all:
@@ -1649,7 +1544,7 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
                 midpoints_Fiber_vertical.append(midpoint)
             if midpoint[1] == 0 or midpoint[1] == b:
                 midpoints_Fiber_horizontal.append(midpoint)
-                
+
         if midpoints_Fiber_vertical:
             pickedEdges_Fiber_Straightness_vertical = p.edges.findAt(((t, midpoints_Fiber_vertical[0][1], -midpoints_Fiber_vertical[0][0]),))
             pickedEdges_vertical = p.edges.findAt(((0, midpoints_Fiber_vertical[0][1], -midpoints_Fiber_vertical[0][0]),))
@@ -1659,9 +1554,9 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
                 pickedEdges_Fiber_Straightness_vertical += pickedEdges_vertical
                 pickedEdges_vertical = p.edges.findAt(((0, midpoint[1], -midpoint[0]),))
                 pickedEdges_Fiber_Straightness_vertical += pickedEdges_vertical
-            
+
             p.Set(edges=pickedEdges_Fiber_Straightness_vertical, name='Set-Fiber-Straightness-vertical')
-        
+
         if midpoints_Fiber_horizontal:
             pickedEdges_Fiber_Straightness_horizontal = p.edges.findAt(((t, midpoints_Fiber_horizontal[0][1], -midpoints_Fiber_horizontal[0][0]),))
             pickedEdges_horizontal = p.edges.findAt(((0, midpoints_Fiber_horizontal[0][1], -midpoints_Fiber_horizontal[0][0]),))
@@ -1671,9 +1566,9 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
                 pickedEdges_Fiber_Straightness_horizontal += pickedEdges_horizontal
                 pickedEdges_horizontal = p.edges.findAt(((0, midpoint[1], -midpoint[0]),))
                 pickedEdges_Fiber_Straightness_horizontal += pickedEdges_horizontal
-            
+
             p.Set(edges=pickedEdges_Fiber_Straightness_horizontal, name='Set-Fiber-Straightness-horizontal')
-        
+
         if midpoints_Fiber_vertical and midpoints_Fiber_horizontal:
             pickedEdges_Fiber_Straightness = pickedEdges_Fiber_Straightness_vertical + pickedEdges_Fiber_Straightness_horizontal
             p.Set(edges=pickedEdges_Fiber_Straightness, name='Set-Fiber-Straightness')
@@ -1683,10 +1578,10 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
         elif not midpoints_Fiber_vertical and midpoints_Fiber_horizontal:
             pickedEdges_Fiber_Straightness = pickedEdges_Fiber_Straightness_horizontal
             p.Set(edges=pickedEdges_Fiber_Straightness, name='Set-Fiber-Straightness')
-    
+
     # initialization
     pickedEdges = None
-    
+
     ## Create Set-Arc
     if Arcs:
         # deal with the first element
@@ -1699,9 +1594,9 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
             pickedEdges_Arc += pickedEdges
             pickedEdges = p.edges.findAt(((t, Arc_midpoint_2D[1], -Arc_midpoint_2D[0]),))
             pickedEdges_Arc += pickedEdges
-        
+
         p.Set(edges=pickedEdges_Arc, name='Set-Arc')
-        
+
     ## Create Set-Interface-Arc
         # deal with the first element
         pickedFaces_Arc = p.faces.findAt(((t/2, Arcs[0][4][1], -Arcs[0][4][0]),))
@@ -1711,35 +1606,24 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
         for center, intersection_start, intersection_end, arc_length, Arc_midpoint_2D, in Arcs[1:]:
             pickedFaces = p.faces.findAt(((t/2, Arc_midpoint_2D[1], -Arc_midpoint_2D[0]),))
             pickedFaces_Arc += pickedFaces
-        
+
         p.Set(faces=pickedFaces_Arc, name='Set-Interface-Arc')
-    
-    ## Create Set-full-circle
+
+    ## Create Set-full-circle and Set-Interface-full-circle
+    # Each interior fibre is one closed circular edge on either end face and one
+    # cylindrical face; all are probed at the 0-degree point of the circle.
     if full_circle_center:
-        # deal with the first element
-        value_full_circle_center = full_circle_center[0]
-        point1 = (0.0, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-        point2 = (t, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-        pickedEdges_full_circle = p.edges.findAt((point1,), (point2,))
-        # deal with others element
-        for value_full_circle_center in full_circle_center[1:]:
-            point1 = (0.0, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-            point2 = (t, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-            pickedEdges_full_circle += p.edges.findAt((point1,), (point2,))
-        
+        pickedEdges_full_circle = None
+        pickedFaces_full_circle = None
+        for value_full_circle_center in full_circle_center:
+            px, py = value_full_circle_center[0] + radius, value_full_circle_center[1]
+            edges_here = p.edges.findAt(((0.0, py, -px),), ((t, py, -px),))
+            faces_here = p.faces.findAt(((t / 2.0, py, -px),))
+            pickedEdges_full_circle = edges_here if pickedEdges_full_circle is None else pickedEdges_full_circle + edges_here
+            pickedFaces_full_circle = faces_here if pickedFaces_full_circle is None else pickedFaces_full_circle + faces_here
         p.Set(edges=pickedEdges_full_circle, name='Set-full-circle')
-        
-    ## Create Set-Interface-full-circle
-        # deal with the first element
-        value_full_circle_center = full_circle_center[0]
-        pointOnInterface_full_circle = (t/2, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-        pickedFaces_full_circle = p.faces.findAt((pointOnInterface_full_circle,))
-        # deal with others element
-        for value_full_circle_center in full_circle_center[1:]:
-            pointOnInterface_full_circle = (t/2, value_full_circle_center[1], -value_full_circle_center[0] - radius)
-            pickedFaces_full_circle += p.faces.findAt((pointOnInterface_full_circle,))
         p.Set(faces=pickedFaces_full_circle, name='Set-Interface-full-circle')
-    
+
     ## Create Set-Interface
     if Arcs and full_circle_center:
         p.Set(faces=pickedFaces_Arc + pickedFaces_full_circle, name='Set-Interface')
@@ -1753,7 +1637,7 @@ def Set_findAt(model, full_circle_center, radius, t, circles, a, b, Arcs, new_pa
 ###############################################################################
 ############################ for Mesh Control #################################
 ###############################################################################
-def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_Z_line, 
+def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_Z_line,
                 minSizeFactor_control, meshType, Model_range,
                 useQuadratic=False, useReduced=False, useHybrid=False,
                 useThermalQuadratic=False, useThermalReduced=False,
@@ -1775,7 +1659,7 @@ def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_
         pickedRegions = c[0:len(c)]
         applyMeshControls(p, meshType)
         p.setElementType(regions=(pickedRegions,), elemTypes=(elemType,))
-        p.generateMesh()
+        _generate_mesh_checked(p, modelName)
         session.viewports['Viewport: 1'].partDisplay.setValues(mesh=ON)
         session.viewports['Viewport: 1'].setValues(displayedObject=p)
         # Print Information
@@ -1790,12 +1674,10 @@ def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_
     elif Model_range == 2:
         # recognise the last ‘_’ and extract the main name
         model_name_prefix = modelName.rsplit('_', 1)[0] + '_'
-        ## print("Main name recognised: {}".format(model_name_prefix))
         mesh_count = 0
         # Iterate over all models and process
         for model_name in mdb.models.keys():
             if model_name.startswith(model_name_prefix):
-                ## print("model_name:", model_name)
                 model = mdb.models[model_name]
                 p = model.parts[partName]
                 seed_by_Number(p, seeds_number_Z_line, mesh_seed_size_curve, mesh_seed_number, minSizeFactor_control)
@@ -1806,10 +1688,9 @@ def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_
                 pickedRegions = c[0:len(c)]
                 applyMeshControls(p, meshType)
                 p.setElementType(regions=(pickedRegions,), elemTypes=(elemType,))
-                p.generateMesh()
+                _generate_mesh_checked(p, model_name)
                 session.viewports['Viewport: 1'].partDisplay.setValues(mesh=ON)
                 session.viewports['Viewport: 1'].setValues(displayedObject=p)
-                ## print("Mesh generation for {} has been completed.".format(model_name))
                 mesh_count += 1
         # Print Information
         print(' ')
@@ -1823,7 +1704,6 @@ def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_
     elif Model_range == 3:
         user_input = kwargs.get('someTextField')
         model_name_prefix = modelName.rsplit('_', 1)[0] + '_'
-        ## print("Main name recognised: {}".format(model_name_prefix))
         # Parsing user input
         valid_selected_model_names = parse_user_input(user_input, model_name_prefix)
         # Generate model name list
@@ -1839,7 +1719,7 @@ def MeshControl(modelName, mesh_seed_size_curve, mesh_seed_number, seeds_number_
                 pickedRegions = c[0:len(c)]
                 applyMeshControls(p, meshType)
                 p.setElementType(regions=(pickedRegions,), elemTypes=(elemType,))
-                p.generateMesh()
+                _generate_mesh_checked(p, model_name)
                 session.viewports['Viewport: 1'].partDisplay.setValues(mesh=ON)
                 session.viewports['Viewport: 1'].setValues(displayedObject=p)
         # Print Information
@@ -1878,51 +1758,40 @@ def seed_by_Number(meshPart, seeds_number_Z_line, mesh_seed_size_curve, mesh_see
     global_seed_size = calculate_global_seed_size_from_curve_edges(meshPart, mesh_seed_size_curve)
     mesh_seed_size_horizontal = global_seed_size
     mesh_seed_size_vertical = global_seed_size
-    ## print("Mesh Seed Size Horizontal: {}".format(mesh_seed_size_horizontal))
-    ## print("Mesh Seed Size Vertical: {}".format(mesh_seed_size_vertical))
-    
+
     # Seeding the edges in sets
     for set_name in meshPart.sets.keys():
-        ## print("Processing set: {}".format(set_name))
         # Identifying sets, edges
         p = meshPart
         meshSet = p.sets[set_name]
         meshEdges = meshSet.edges
         # Seeds for straightness
         if set_name == 'Set-thickness-Straightness':
-            ## print("Seeding thickness direction with number of seeds: {}".format(seeds_number_Z_line))
             p.seedEdgeByNumber(edges=meshEdges, number=seeds_number_Z_line, constraint=FIXED)
-            ## print("thickness direction seeding has been completed.")
         elif set_name == 'Set-Matrix-Straightness-vertical':
             for edge_Matrix in meshEdges:
                 segment_length = calculate_segment_length(meshPart, edge_Matrix)
                 seeds_number_Matrix_vertical = calculate_N_Matrix(segment_length, mesh_seed_size_vertical, minSizeFactor_control)
-                ## print("Matrix vertical segment length: {}, seeds number: {}".format(segment_length, seeds_number_Matrix_vertical))
                 p.seedEdgeByNumber(edges=(edge_Matrix,), number=int(seeds_number_Matrix_vertical), constraint=FIXED)
         elif set_name == 'Set-Fiber-Straightness-vertical':
             for edge_Fiber in meshEdges:
                 segment_length = calculate_segment_length(meshPart, edge_Fiber)
                 seeds_number_Fiber_vertical = calculate_N_Fiber(segment_length, mesh_seed_size_vertical, minSizeFactor_control)
-                ## print("Fiber vertical segment length: {}, seeds number: {}".format(segment_length, seeds_number_Fiber_vertical))
                 p.seedEdgeByNumber(edges=(edge_Fiber,), number=int(seeds_number_Fiber_vertical), constraint=FIXED)
-        elif set_name == 'Set-Matrix-Straightness-horizontal':  
+        elif set_name == 'Set-Matrix-Straightness-horizontal':
             for edge_Matrix in meshEdges:
                 segment_length = calculate_segment_length(meshPart, edge_Matrix)
                 seeds_number_Matrix_horizontal = calculate_N_Matrix(segment_length, mesh_seed_size_horizontal, minSizeFactor_control)
-                ## print("Matrix horizontal segment length: {}, seeds number: {}".format(segment_length, seeds_number_Matrix_horizontal))
                 p.seedEdgeByNumber(edges=(edge_Matrix,), number=int(seeds_number_Matrix_horizontal), constraint=FIXED)
         elif set_name == 'Set-Fiber-Straightness-horizontal':
             for edge_Fiber in meshEdges:
                 segment_length = calculate_segment_length(meshPart, edge_Fiber)
                 seeds_number_Fiber_horizontal = calculate_N_Fiber(segment_length, mesh_seed_size_horizontal, minSizeFactor_control)
-                ## print("Fiber horizontal segment length: {}, seeds number: {}".format(segment_length, seeds_number_Fiber_horizontal))
                 p.seedEdgeByNumber(edges=(edge_Fiber,), number=int(seeds_number_Fiber_horizontal), constraint=FIXED)
         # Seeds for full circle
         elif set_name == 'Set-full-circle':
-            for edge in meshEdges:
-                p.seedEdgeByNumber(edges=meshEdges, number=mesh_seed_size_curve, constraint=FIXED)
-                ## print("Full circles seeding have been completed with a seed count of {}.".format(mesh_seed_size_curve))
-        
+            p.seedEdgeByNumber(edges=meshEdges, number=mesh_seed_size_curve, constraint=FIXED)
+
         # Seeds for Arc
         elif set_name == 'Set-Arc':
             for edge_arc in meshEdges:
@@ -1935,14 +1804,12 @@ def seed_by_Number(meshPart, seeds_number_Z_line, mesh_seed_size_curve, mesh_see
                 xm, ym, zm = midpoint_coords
                 # Calculating the center and radius of a circle
                 center, radius, angle_rad = calculate_circle_center_and_radius_in_YZ(x1, y1, z1, x2, y2, z2, xm, ym, zm)
-                ## print("Arc center: {}, radius: {}, angle in radians: {}".format(center, radius, angle_rad))
                 # Calculate the number of seeds on the arc
                 #seeds_number_arc = int(mesh_seed_size_curve * (angle_rad / (2 * math.pi)) + 0.5)
                 seeds_number_arc = max(int(mesh_seed_size_curve * (angle_rad / (2 * math.pi))) + 1, 2)
-                ## print("Arc segment length, seeds number: {}".format(seeds_number_arc))
                 # Seeds for the arc
                 p.seedEdgeByNumber(edges=(edge_arc,), number=seeds_number_arc, constraint=FIXED)
-    
+
     return
 
 def calculate_global_seed_size_from_curve_edges(meshPart, mesh_seed_size_curve):
@@ -1986,14 +1853,6 @@ def calculate_segment_length(meshPart, edge):
     segment_length = ((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)**0.5
     return segment_length
 
-def calculate_segment_length_manually(meshPart, edge):
-    vertices = edge.getVertices()
-    vertex1_coords = meshPart.vertices[vertices[0]].pointOn
-    vertex2_coords = meshPart.vertices[vertices[1]].pointOn
-    x1, y1, z1 = vertex1_coords[0]
-    x2, y2, z2 = vertex2_coords[0]
-    segment_length = ((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)**0.5
-    return segment_length
 
 # Calculate arc geometry information
 def calculate_circle_center_and_radius_in_YZ(x1, y1, z1, x2, y2, z2, xm, ym, zm):
@@ -2011,7 +1870,7 @@ def calculate_circle_center_and_radius_in_YZ(x1, y1, z1, x2, y2, z2, xm, ym, zm)
     dz = zm - mid_z
     # Calculate the length of the direction vector
     direction_magnitude = math.sqrt(dy**2 + dz**2)
-    
+
     if direction_magnitude == 0:
         return (x1, mid_y, mid_z), radius, math.pi
     # circle center
@@ -2022,7 +1881,7 @@ def calculate_circle_center_and_radius_in_YZ(x1, y1, z1, x2, y2, z2, xm, ym, zm)
         xc = 0
     else:
         xc = x1
-    
+
     angle_rad = 2 * math.asin(chord_length / (2 * radius))
     vector_to_midpoint = (ym - yc, zm - zc)
     vector_to_vertex1 = (y1 - yc, z1 - zc)
@@ -2034,9 +1893,9 @@ def calculate_circle_center_and_radius_in_YZ(x1, y1, z1, x2, y2, z2, xm, ym, zm)
     else:
         # negative, great arc
         angle_rad = 2 * math.pi - angle_rad
-    
+
     return (xc, yc, zc), radius, angle_rad
- 
+
 # Calculate the number of seeds
 def calculate_N_Fiber(segment_length, mesh_seed_size_length, minSizeFactor_control):
     result_A = int(segment_length / mesh_seed_size_length + 0.5 + 1)
@@ -2076,20 +1935,11 @@ def parse_user_input(user_input, model_name_prefix, model_name_suffix=''):
         if model_name not in mdb.models.keys():
             print("Model not retrieved: {}".format(model_name))
         else:
-            valid_selected_model_names.append(model_name) 
+            valid_selected_model_names.append(model_name)
     if not valid_selected_model_names:
         raise ValueError("No valid models found based on the 'Selected numbers' input.")
     return valid_selected_model_names
 
-def ensure_model_name_ends_with_numeric_suffix(model_name, context_label):
-    try:
-        suffix = model_name.rsplit('_', 1)[1]
-    except Exception:
-        raise ValueError("{} requires the selected model name to end with '_<number>'.".format(context_label))
-    if not suffix.isdigit():
-        raise ValueError("{} requires the selected model name to end with '_<number>'. Current model: {}".format(
-            context_label, model_name))
-    return
 
 def split_model_index(model_name):
     """Split a model name into (prefix, number, suffix) around its model index.
@@ -2113,15 +1963,12 @@ def split_model_index(model_name):
         return m.group('prefix'), m.group('num'), ''
     return None
 
-# Generate model name
-def generate_model_names(indices, prefix):
-    return ['{}{}'.format(prefix, i) for i in indices]
 
 def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=False,
-                   useThermalQuadratic=False, useThermalReduced=False, 
+                   useThermalQuadratic=False, useThermalReduced=False,
                    useConvection=False, useDispersion=False):
     """Get element type based on selections with correct thermal element naming
-    
+
     Thermal elements in Abaqus:
     - DC3D8: Basic 8-node thermal element
     - DC3D8R: Reduced integration
@@ -2129,9 +1976,9 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
     - DCC3D8D: Convection/diffusion with dispersion control
     - DC3D20: 20-node quadratic (no modifiers allowed)
     """
-    
+
     import abaqusConstants  # Ensure module is imported
-    
+
     if meshType == 1:  # Thermal analysis
         if useThermalQuadratic:
             # Quadratic thermal element - no modifiers allowed
@@ -2152,7 +1999,7 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
             else:
                 # Basic element
                 elemCode_str = 'DC3D8'
-        
+
         # Get element code from abaqusConstants
         try:
             elemCode = getattr(abaqusConstants, elemCode_str)
@@ -2161,7 +2008,7 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
             # Fallback to basic element if not found
             print("Warning: Element type {} not found, using DC3D8".format(elemCode_str))
             elemCode = getattr(abaqusConstants, 'DC3D8')
-            
+
     elif meshType == 2:  # Mechanical analysis
         # Base element selection
         if useQuadratic:
@@ -2170,17 +2017,17 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
         else:
             # Linear mechanical elements
             base_code = 'C3D8'
-        
+
         # Add modifiers for mechanical elements
         modifiers = ''
         if useReduced:
             modifiers += 'R'
         if useHybrid:
             modifiers += 'H'
-        
+
         # Construct final element code
         elemCode_str = base_code + modifiers
-        
+
         # Get element code from abaqusConstants
         try:
             elemCode = getattr(abaqusConstants, elemCode_str)
@@ -2189,7 +2036,7 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
             # Fallback to base element if combination not valid
             print("Warning: Element type {} not found, using {}".format(elemCode_str, base_code))
             elemCode = getattr(abaqusConstants, base_code)
-            
+
     else:  # Thermo-mechanical coupled (meshType == 3)
         # Base element selection
         if useQuadratic:
@@ -2198,7 +2045,7 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
         else:
             # Linear coupled elements
             base_code = 'C3D8'
-        
+
         # Add modifiers for coupled elements
         modifiers = ''
         if useReduced:
@@ -2207,10 +2054,10 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
             modifiers += 'H'
         # Add T for temperature coupling
         modifiers += 'T'
-        
+
         # Construct final element code
         elemCode_str = base_code + modifiers
-        
+
         # Get element code from abaqusConstants
         try:
             elemCode = getattr(abaqusConstants, elemCode_str)
@@ -2219,10 +2066,71 @@ def getElementType(meshType, useQuadratic=False, useReduced=False, useHybrid=Fal
             # Fallback to base coupled element if combination not valid
             print("Warning: Element type {} not found, using {}T".format(elemCode_str, base_code))
             elemCode = getattr(abaqusConstants, base_code + 'T')
-    
+
     # Create element type object
     elemType = mesh.ElemType(elemCode=elemCode, elemLibrary=STANDARD)
     return elemType
+
+def _mesh_is_complete(p):
+    """True when every cell of the part carries elements."""
+    try:
+        if p.getUnmeshedRegions():
+            return False
+    except Exception:
+        pass
+    try:
+        return len(p.elements) > 0
+    except Exception:
+        return False
+
+
+def _mesh_error_count(p):
+    """Number of elements that fail the Abaqus analysis checks."""
+    try:
+        result = p.verifyMeshQuality(criterion=ANALYSIS_CHECKS)
+        return len(result.get('failedElements', ()))
+    except Exception:
+        return 0
+
+
+def _generate_mesh_checked(p, model_name, max_attempts=3):
+    """Mesh the part and check it (complete, no analysis-check errors).  A
+    failed attempt is repeated with the other source-face algorithm; after
+    max_attempts the user is told to refine the mesh.  Returns True on success."""
+    c = p.cells
+    regions = c[0:len(c)]
+    algorithms = (None, ADVANCING_FRONT, MEDIAL_AXIS)
+    status = ''
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            try:
+                p.deleteMesh(regions=regions)
+            except Exception:
+                pass
+            try:
+                p.setMeshControls(regions=regions, elemShape=HEX_DOMINATED, technique=SWEEP,
+                                  allowMapped=False, sizeGrowthRate=1.0,
+                                  algorithm=algorithms[(attempt - 1) % len(algorithms)])
+            except Exception:
+                pass
+        try:
+            p.generateMesh()
+        except Exception:
+            pass
+        if not _mesh_is_complete(p):
+            status = 'incomplete'
+            continue
+        errors = _mesh_error_count(p)
+        if errors == 0:
+            if attempt > 1:
+                print("  {}: mesh accepted on attempt {}.".format(model_name, attempt))
+            return True
+        status = '{} element(s) with analysis errors'.format(errors)
+    print("  {}: mesh {} after {} attempts. The mesh is too coarse for this fiber "
+          "arrangement: increase the fiber-circle seed number and mesh again.".format(
+              model_name, status, max_attempts))
+    return False
+
 
 def applyMeshControls(p, meshType):
     """Apply mesh controls (sweep technique and element shape) based on mesh type.
@@ -2238,8 +2146,6 @@ def applyMeshControls(p, meshType):
     else:  # Coupled - HEX_DOMINATED sweep
         p.setMeshControls(regions=pickedRegions, elemShape=HEX_DOMINATED,
                           technique=SWEEP, allowMapped=False, sizeGrowthRate=1.0)
-
-
 
 
 ###############################################################################
@@ -2271,7 +2177,6 @@ def Material(model_for_material, fiber_material, matrix_material, Model_range_ma
         set_material_orientation_and_section(model, fiber_material, matrix_material)
         # for other models
         model_name_prefix = model_for_material.rsplit('_', 1)[0] + '_'
-        ## print("Main name recognised: {}".format(model_name_prefix))
         material_count = 1
         select_model = mdb.models[model_for_material]
         material_names = select_model.materials.keys()
@@ -2290,8 +2195,6 @@ def Material(model_for_material, fiber_material, matrix_material, Model_range_ma
                         mdb.models[model_name].materialsFromOdb(fileName=odb_file_name)
                         # Print the name of the imported material
                         ##for material in material_list:
-                        ##    print("Material imported from ODB: {}".format(material.name))
-                        ##print("Material has been successfully imported into the model {}.".format(model_name))
                 set_material_orientation_and_section(model, fiber_material, matrix_material)
 
                 material_count += 1
@@ -2319,7 +2222,6 @@ def Material(model_for_material, fiber_material, matrix_material, Model_range_ma
         # for other selected models
         user_input = kwargs.get('user_input')
         model_name_prefix = model_for_material.rsplit('_', 1)[0] + '_'
-        ## print("Main name recognised: {}".format(model_name_prefix))
         select_model = mdb.models[model_for_material]
         material_names = select_model.materials.keys()
         odb_file_name = export_materials_to_odb(model_for_material)
@@ -2332,7 +2234,7 @@ def Material(model_for_material, fiber_material, matrix_material, Model_range_ma
                 for material_name in material_names:
                     if material_name not in model.materials.keys():
                         # Creation of materials with the same name
-                        mdb.models[model_name].materialsFromOdb(fileName=odb_file_name)   
+                        mdb.models[model_name].materialsFromOdb(fileName=odb_file_name)
                 set_material_orientation_and_section(model, fiber_material, matrix_material)
                 material_count += 1
         # Print Information
@@ -2385,22 +2287,106 @@ def export_materials_to_odb(model_for_material):
 ###############################################################################
 #################################### for Void #################################
 ###############################################################################
+# ---------------------------------------------------------------------------
+# Void insertion run report
+# ---------------------------------------------------------------------------
+# The void generators used to narrate every iteration to the Abaqus message
+# area, which duplicates the per-model void_summary_report.txt.  They now only
+# record what happened in _VOID_RUN_NOTES, and Void() prints one line per model
+# plus a single summary table at the end.
+_VOID_RUN_NOTES = {}
+
+
+def void_note_reset():
+    _VOID_RUN_NOTES.clear()
+
+
+def void_note_relaxed(names):
+    """Record which targets were met only after their tolerance was relaxed."""
+    if names:
+        _VOID_RUN_NOTES['relaxed'] = list(names)
+
+
+# Priorities for void_note_problem: the void volume fraction is the target the
+# plug-in must always meet, so its message outranks the others when several
+# things go wrong in the same run.
+VOID_PROBLEM_PRIORITY = {'vvoid': 3, 'theta': 2, 'w': 1, 'other': 0}
+
+
+def void_note_problem(message, kind='other'):
+    """Record a target that could not be met.  The message with the highest
+    priority is the one shown in the summary table."""
+    priority = VOID_PROBLEM_PRIORITY.get(kind, 0)
+    if priority >= _VOID_RUN_NOTES.get('problem_priority', -1):
+        _VOID_RUN_NOTES['problem'] = message
+        _VOID_RUN_NOTES['problem_priority'] = priority
+
+
+def void_run_status():
+    """Short status string for the summary table: which tolerances were relaxed
+    and which target could not be met."""
+    parts = []
+    if _VOID_RUN_NOTES.get('relaxed'):
+        parts.append('relaxed: {}'.format(', '.join(_VOID_RUN_NOTES['relaxed'])))
+    if 'problem' in _VOID_RUN_NOTES:
+        parts.append(_VOID_RUN_NOTES['problem'])
+    return '; '.join(parts) if parts else 'OK'
+
+
+def format_void_target(value):
+    """Target theta / w as shown in the summary header."""
+    if value is None or isinstance(value, str):
+        return 'Random'
+    if isinstance(value, float):
+        return '{:.3f}'.format(value)
+    return '{}'.format(value)
+
+
+def print_void_summary(rows, target_vf, target_theta, target_w, separator):
+    """One table for the whole run, printed after the last model."""
+    n_ok = len([r for r in rows if r['status'] == 'OK'])
+    n_relaxed = len([r for r in rows if r['status'].startswith('relaxed')])
+    n_problem = len(rows) - n_ok - n_relaxed
+    # a model counted as relaxed may also carry a target it could not meet
+    print(' ')
+    print(separator)
+    print('Void insertion summary: {} -- {} within tolerance, {} relaxed, {} not met'.format(
+        '1 model' if len(rows) == 1 else '{} models'.format(len(rows)),
+        n_ok, n_relaxed, n_problem))
+    print('Target: Vvoid = {:.4f}%, theta = {}, w = {}'.format(
+        target_vf, format_void_target(target_theta), format_void_target(target_w)))
+    print(separator)
+    name_width = max([len(r['model']) for r in rows] + [len('model')])
+    header = '  {:<{w}}  {:>6}  {:>9}  {:>9}  {:>6}  {:>8}  {}'.format(
+        'model', 'voids', 'Vvoid (%)', 'dev (%)', 'w', 'time (s)', 'status', w=name_width)
+    print(header)
+    for r in rows:
+        print('  {:<{w}}  {:>6d}  {:>9.4f}  {:>+9.4f}  {:>6.3f}  {:>8.1f}  {}'.format(
+            r['model'], r['voids'], r['vf'], r['vf'] - target_vf, r['w'], r['time'],
+            r['status'], w=name_width))
+    print(separator)
+    print('Per-model details are in the Void_Statistics_<model> folder'
+          ' (void_summary_report.txt).')
+    print(' ')
+
+
 def Void(model_for_void, part_for_void, target_vf_void, Model_range_void, **kwargs):
     separator = "-" * 100
+    void_rows = []
     model_name_prefix = model_for_void.rsplit('_', 1)[0] + '_'
-    
+
     # void distribution parameter
     void_distribution_method = kwargs.get('void_distribution_method', 1)
     void_distribution_value = kwargs.get('void_distribution_value', 0.5)
-    
+
     # void size parameter ()
     void_size_method = kwargs.get('void_size_method', 1)
     void_theta_value = kwargs.get('void_theta_value', 5)
-    
+
     # void priority parameter ()
     void_priority = kwargs.get('void_priority', 3)
 
-    # ---- Void shape factor (beta) -- Phase 4 Step 1 ----
+    # ---- Void shape factor (beta) ----
     void_beta_active      = kwargs.get('void_beta_active', False)
     void_beta_unified     = kwargs.get('void_beta_unified', 1)
     void_beta_value       = kwargs.get('void_beta_value', 1.0)
@@ -2433,7 +2419,6 @@ def Void(model_for_void, part_for_void, target_vf_void, Model_range_void, **kwar
         void_theta_star        = void_theta_star,
     )
 
-    # theta=1w
     if void_size_method == 2 and void_theta_value == 1:
         if void_distribution_method == 2:  # Custom w
             if void_distribution_value != 0.0 and void_distribution_value != 1.0:
@@ -2442,64 +2427,51 @@ def Void(model_for_void, part_for_void, target_vf_void, Model_range_void, **kwar
                     "Current w value: {:.2f}\n"
                     "Please set w to 0.0, 1.0, or choose Random distribution method.".format(
                         void_distribution_value))
-    
-    # Set void for selected model only
+
+    # Collect the models to process, then run them through the same loop so
+    # that every range option produces the same one-line-per-model progress
+    # report and the same summary table.
     if Model_range_void == 1:
-        create_void_set(model_for_void, part_for_void, target_vf_void,
-                       void_distribution_method, void_distribution_value,
-                       void_size_method, void_theta_value, void_priority,
-                       **beta_kwargs)
-
-        print(' ')
-        print(separator)
-        print('------------------------------------- Set Void Information -------------------------------------')
-        print(separator)
-        print("Successfully completed inserting voids for the model:")
-        print("==> {}".format(model_for_void))
-    # Set void for all models with the same prefix
+        target_model_names = [model_for_void]
     elif Model_range_void == 2:
-        void_count = 0
-        for model_name in mdb.models.keys():
-            if model_name.startswith(model_name_prefix):
-                create_void_set(model_name, part_for_void, target_vf_void,
-                              void_distribution_method, void_distribution_value,
-                              void_size_method, void_theta_value, void_priority,
-                              **beta_kwargs)
-                void_count += 1
-
-        print(' ')
-        print(separator)
-        print('------------------------------------- Set Void Information -------------------------------------')
-        print(separator)
-        print("Successfully completed inserting voids for {} models with main name:".format(void_count))
-        print("==> {}".format(model_name_prefix))
-    # Set void in user-selected models
+        target_model_names = [name for name in mdb.models.keys()
+                              if name.startswith(model_name_prefix)]
     elif Model_range_void == 3:
-        void_count = 0
-        user_input_void = kwargs.get('user_input_void')
+        valid_selected_model_names_void = parse_user_input(kwargs.get('user_input_void'),
+                                                           model_name_prefix)
+        target_model_names = [name for name in mdb.models.keys()
+                              if name in valid_selected_model_names_void]
+    else:
+        target_model_names = []
 
-        valid_selected_model_names_void = parse_user_input(user_input_void, model_name_prefix)
+    if not target_model_names:
+        raise ValueError("No model was selected for void insertion.")
 
-        for model_name in mdb.models.keys():
-            if model_name in valid_selected_model_names_void:
-                create_void_set(model_name, part_for_void, target_vf_void,
+    print(' ')
+    print(separator)
+    print("Inserting voids into {}; target Vvoid = {:.4f}%.".format(
+        '1 model' if len(target_model_names) == 1 else '{} models'.format(len(target_model_names)),
+        target_vf_void))
+    print(separator)
+
+    for model_index, model_name in enumerate(target_model_names):
+        row = create_void_set(model_name, part_for_void, target_vf_void,
                               void_distribution_method, void_distribution_value,
                               void_size_method, void_theta_value, void_priority,
                               **beta_kwargs)
-                void_count += 1
-        
-        print(' ')
-        print(separator)
-        print('------------------------------------- Set Void Information -------------------------------------')
-        print(separator)
-        print("Successfully completed inserting voids for {} user-selected model(s):".format(void_count))
-        print("\n".join(["==> {}.".format(name) for name in valid_selected_model_names_void]))
-    
-    print(' ')
-    print(separator)
-    print("--------------------------- Voids have been inserted for all selected models ---------------------------")
-    print(separator)
-    print(' ')
+        if row:
+            void_rows.append(row)
+            print("  [{}/{}] {}: {} void(s), Vvoid = {:.4f}%, {} ({:.1f} s)".format(
+                model_index + 1, len(target_model_names), model_name,
+                row['voids'], row['vf'], row['status'], row['time']))
+        else:
+            print("  [{}/{}] {}: no voids were inserted.".format(
+                model_index + 1, len(target_model_names), model_name))
+
+    if void_rows:
+        target_theta = void_theta_value if void_size_method == 2 else None
+        target_w = void_distribution_value if void_distribution_method == 2 else None
+        print_void_summary(void_rows, target_vf_void, target_theta, target_w, separator)
 
 def create_void_set(model_for_void, part_for_void, target_vf_void,
                    void_distribution_method=1, void_distribution_value=0.5,
@@ -2510,7 +2482,7 @@ def create_void_set(model_for_void, part_for_void, target_vf_void,
                    void_theta_star_active=False, void_theta_star=0.0):
     """
     Build the void set for one model. The optional void_beta_* arguments
-    enable a non-spherical envelope bias for void growth (Phase 4 Step 1);
+    enable a non-spherical envelope bias for void growth;
     when void_beta_active=False the legacy distance-only rule is used.
     """
 
@@ -2575,52 +2547,39 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
                           void_beta_active, void_beta_value_fiber,
                           void_beta_value_matrix, void_beta_orientation,
                           void_theta_star_active, void_theta_star):
-    print("\n========== VOID INSERTION START ==========")
-    print("Model: {}".format(model_for_void))
-    if void_beta_active:
-        print("  Beta shape factor: ACTIVE")
-        print("    fiber-adjacent beta = {:.4f}".format(void_beta_value_fiber))
-        print("    inter-matrix   beta = {:.4f}".format(void_beta_value_matrix))
-        print("    orientation         = {}".format(
-            'random SO(3)' if int(void_beta_orientation) == 1 else 'orthogonal'))
-    if void_theta_star_active:
-        print("  theta*: {:.4f} (mean voids per fiber)".format(void_theta_star))
-    
+    void_note_reset()
+    _void_model_start = time.time()
+    requested_vf_void = target_vf_void
     target_vf_void = target_vf_void / 100.0
     model = mdb.models[model_for_void]
     part = model.parts[part_for_void]
-    
-    # ==========  ==========
-    work_dir = os.getcwd()  # 
+
+    work_dir = os.getcwd()
     try:
         fiber_coords = extract_fiber_centers(
-            part, 
-            model_name=model_for_void, 
+            part,
+            model_name=model_for_void,
             work_dir=work_dir
         )
     except ValueError as e:
-        print("\n" + "!" * 60)
-        print("CRITICAL ERROR: {}".format(e))
-        print("!" * 60)
-        fiber_coords = None  # 
-    
-    # ========== 1.  ==========
-    print("\n[Step 1] Creating element sets...")
+        print("  {}: fiber centers unavailable ({}).".format(model_for_void, e))
+        void_note_problem('fiber centers unavailable')
+        fiber_coords = None
+
     set_matrix_region = part.sets['Set-Matrix'].cells
     element_labels = []
     for cell in set_matrix_region:
         elements_in_cell = cell.getElements()
         for elem in elements_in_cell:
             element_labels.append(elem.label)
-    
+
     if not element_labels:
         raise ValueError("No matrix elements found!")
-    
+
     set_matrix_element = part.SetFromElementLabels(
         name='Set-Matrix-element',
         elementLabels=_abaqus_label_tuple(element_labels))
-    #print("  Matrix elements: {}".format(len(element_labels)))
-    
+
     set_fiber_region = part.sets['Set-Fiber'].cells
     fiber_element_labels = []
     for cell in set_fiber_region:
@@ -2630,10 +2589,7 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
     set_fiber_element = part.SetFromElementLabels(
         name='Set-Fiber-element',
         elementLabels=_abaqus_label_tuple(fiber_element_labels))
-    #print("  Fiber elements: {}".format(len(fiber_element_labels)))
-    
-    # ========== 2.  ==========
-    print("\n[Step 2] Creating air material...")
+
     if 'air' not in model.materials.keys():
         air_material = model.Material(name='air')
         air_material.Density(table=((1.0e-10, ),))
@@ -2641,28 +2597,20 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
         air_material.Conductivity(table=((0.026, ), ))
     if 'air' not in model.sections.keys():
         model.HomogeneousSolidSection(name='air', material='air', thickness=None)
-    #print("  Air material and section created.")
-    
-    # ========== 3.  ==========
-    print("\n[Step 3] Calculating volumes...")
+
     matrix_element_labels = [element.label for element in set_matrix_element.elements]
     rve_volume = part.getVolume()
     matrix_volume = model.parts['Matrix'].getVolume()
     matrix_vf = matrix_volume / rve_volume
-    
-    #print("  RVE volume: {:.6e}".format(rve_volume))
-    #print("  Matrix volume: {:.6e}".format(matrix_volume))
-    #print("  Matrix Vf: {:.2f}%".format(matrix_vf * 100))
-    
+
+
     if target_vf_void > matrix_vf:
         raise ValueError("Target void Vf ({:.2f}%) exceeds matrix Vf ({:.2f}%).".format(
             target_vf_void * 100, matrix_vf * 100))
-    
+
     target_volume = rve_volume * target_vf_void
-    #print("  Target void volume: {:.6e}".format(target_volume))
-    
+
     # ========== 4.  +  ==========
-    print("\n[Step 4] Classifying elements and calculating exact volumes...")
     # --- (1) Cache ALL node coordinates once: O(N_nodes) API cost ---
     # Avoid per-element sequenceFromLabels((n,))[0].coordinates calls.
     near_fiber_candidates = []
@@ -2670,39 +2618,61 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
     element_volume_dict   = {}
     element_centroid_dict = {}
     element_nodes_dict    = {}
-    
-    node_coord_dict = {}
-    for n in part.nodes:
-        node_coord_dict[n.label] = np.array(n.coordinates)
-    
-    # --- (2) Cache fiber element node labels in one pass ---
-    fiber_elements = part.sets['Set-Fiber-element'].elements
-    fiber_nodes = set()
-    
-    # IMPORTANT: Also populate element_nodes_dict for fiber elements, so that
-    # downstream code (CASE 1 classification at line ~3761) can look up each
-    # fiber element's node set instead of getting a default empty set.
-    for elem in fiber_elements:
-        elem_node_labels = set([node.label for node in elem.getNodes()])
-        element_nodes_dict[elem.label] = elem_node_labels   # <-- NEW
-        fiber_nodes |= elem_node_labels                      # keep the flat union as before
-    
-    # --- (3) Fetch ALL matrix elements in ONE call (not one-by-one) ---
-    matrix_elems_seq = part.elements.sequenceFromLabels(_abaqus_label_tuple(matrix_element_labels))
-    
 
-    
-    for element in matrix_elems_seq:         # direct iteration — no repeated API lookup
-        label     = element.label
-        node_objs = element.getNodes()
-        elem_node_labels = tuple([n.label for n in node_objs])
-        elem_node_set    = set(elem_node_labels)
+    node_coord_dict = {}
+    node_index_to_label = []
+    node_xyz_rows = []
+    for n in part.nodes:
+        node_label = n.label
+        node_xyz = n.coordinates
+        node_index_to_label.append(node_label)
+        node_xyz_rows.append(node_xyz)
+        node_coord_dict[node_label] = np.array(node_xyz)
+
+    # Periodic pairing of the nodes on opposite RVE faces: elements across the
+    # boundary then share a face, so voids can grow through it as the periodic
+    # boundary conditions imply.
+    node_xyz_all = np.array(node_xyz_rows, dtype=float)
+    box_min = node_xyz_all.min(axis=0)
+    box_max = node_xyz_all.max(axis=0)
+    box_extent = box_max - box_min
+    node_canon, periodic_pairs = _periodic_node_canon(node_coord_dict, box_min, box_max)
+    if periodic_pairs == 0:
+        print("  {}: no matching node pairs on opposite RVE faces; voids stop at the boundary".format(model_for_void))
+
+    # --- (2) One pass over the mesh: element connectivity is a plain attribute,
+    # far cheaper than getNodes(), which builds a MeshNode object per node.
+    element_node_labels_dict, connectivity_ok = _read_element_node_labels(part, node_index_to_label)
+    if connectivity_ok:
+        # node labels are in connectivity order, so the face definitions used by
+        # the fiber-surface metrics can be evaluated from this copy of the mesh
+        mesh_cache = {
+            'node_xyz': np.array(node_xyz_rows, dtype=float),
+            'node_index_to_label': node_index_to_label,
+            'element_node_labels': element_node_labels_dict,
+        }
+    else:
+        mesh_cache = None
+
+    # Fiber element node labels, also kept in element_nodes_dict so that
+    # downstream code can look up each fiber element's node set.
+    fiber_nodes = set()
+    for label in fiber_element_labels:
+        elem_node_labels = set([node_canon[nl] for nl in element_node_labels_dict[label]])
+        element_nodes_dict[label] = elem_node_labels
+        fiber_nodes |= elem_node_labels
+
+    # --- (3) Matrix elements (node sets in periodic-canonical labels; the
+    # coordinates below use the element's own nodes) ---
+    for label in matrix_element_labels:
+        elem_node_labels = element_node_labels_dict[label]
+        elem_node_set    = set([node_canon[nl] for nl in elem_node_labels])
         element_nodes_dict[label] = elem_node_set
-    
+
         # coords via pre-cached dict — pure Python dict lookups
         coords = np.array([node_coord_dict[nl] for nl in elem_node_labels])
         element_centroid_dict[label] = coords.mean(axis=0)
-    
+
         # Geometric volume — C3D4 (4 nodes), C3D8 (8 nodes).
         # For C3D4: V = |det([v1-v0, v2-v0, v3-v0])| / 6
         # For C3D8: decompose into 6 tetrahedra from centroid, sum |det|/6
@@ -2714,56 +2684,82 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
             elements_seq = part.elements.sequenceFromLabels(labels=_abaqus_label_tuple((label,)))
             select_region = regionToolset.Region(elements=elements_seq)
             element_volume_dict[label] = part.getMassProperties(regions=select_region)['volume']
-            
+
         if elem_node_set & fiber_nodes:
             near_fiber_candidates.append(label)
         else:
             inter_matrix_candidates.append(label)
-    
-    #print("  Element volumes calculated: {} elements".format(len(element_volume_dict)))
-    #print("  Near-fiber candidates: {}".format(len(near_fiber_candidates)))
-    #print("  Inter-matrix candidates: {}".format(len(inter_matrix_candidates)))
-    
-    # ========== 5. ==========
-    print("\n[Step 5] Building face-based element adjacency...")
-    element_neighbors_dict = build_element_adjacency_by_face(part, matrix_element_labels, element_nodes_dict)
-    print("  Adjacency built for {} elements.".format(len(element_neighbors_dict)))
 
-    # ========== 6.  ==========
-    print("\n[Step 6] Calculating void parameters...")
+    near_fiber_candidates = _LabelList(near_fiber_candidates)
+    inter_matrix_candidates = _LabelList(inter_matrix_candidates)
+    matrix_element_labels = _LabelList(matrix_element_labels)
+    fiber_element_labels = _LabelList(fiber_element_labels)
+
+
+    element_neighbors_dict = build_element_adjacency_by_face(part, matrix_element_labels, element_nodes_dict)
+
+    # Voids are placed in the main matrix body only.  A matrix region that the
+    # fibre geometry alone detaches from it (typically a sliver between a
+    # boundary-cut fibre and the RVE edge) shares no element face with the rest
+    # of the matrix, so no void could grow across anyway; it stays matrix.
+    component_of = _matrix_base_components(set(matrix_element_labels), element_neighbors_dict)
+    component_sizes = {}
+    for label, component in component_of.items():
+        component_sizes[component] = component_sizes.get(component, 0) + 1
+    if len(component_sizes) > 1:
+        main_component = max(component_sizes.keys(), key=lambda c: component_sizes[c])
+        placeable = set([label for label, component in component_of.items() if component == main_component])
+        near_fiber_candidates = _LabelList([l for l in near_fiber_candidates if l in placeable])
+        inter_matrix_candidates = _LabelList([l for l in inter_matrix_candidates if l in placeable])
+        placeable_matrix_labels = _LabelList([l for l in matrix_element_labels if l in placeable])
+        print("  {}: {} matrix elements in {} matrix region(s) enclosed by fibers excluded from void placement".format(
+            model_for_void, len(matrix_element_labels) - len(placeable), len(component_sizes) - 1))
+    else:
+        placeable_matrix_labels = matrix_element_labels
+
     volume_list = list(element_volume_dict.values())  # list
     avg_element_volume = np.mean(volume_list)
-    print("  Average element volume: {:.6e}".format(avg_element_volume))
-    
-    if void_size_method == 1:  # 
+
+    if void_size_method == 1:
         num_voids = max(1, int(target_volume / avg_element_volume / 3))
         target_single_void_volume = target_volume / num_voids
-        void_theta_value = 'Random'  # ← 
+        void_theta_value = 'Random'  # ←
     else:  #  (theta)
         num_voids = void_theta_value
         target_single_void_volume = target_volume / num_voids
-    
+
     target_elements_per_void = max(1, int(target_single_void_volume / avg_element_volume + 0.5))
-    
-    #print("  Target number of voids: {}".format(num_voids))
-    #print("  Target elements per void: {}".format(target_elements_per_void))
-    #print("  Target single void volume: {:.6e}".format(target_single_void_volume))
-    
-    if void_distribution_method == 1:  # 
+
+
+    if void_distribution_method == 1:
         target_near_ratio = None
-        void_distribution_value = 'Random'  # ← 
-        #print("  Distribution: Random")
-    else:  # 
+        void_distribution_value = 'Random'  # ←
+    else:
         target_near_ratio = void_distribution_value
-        #print("  Distribution: Custom, w = {}".format(target_near_ratio))
-    
+        # A requested w between 0 and 1 needs elements in both pools.  At a high
+        # fiber volume fraction on a coarse mesh nearly every matrix element
+        # touches a fiber, so the inter-matrix pool can be empty and w is then
+        # fixed at 1 by the mesh, not by the algorithm.
+        if 0.0 < target_near_ratio < 1.0:
+            pool_total = len(near_fiber_candidates) + len(inter_matrix_candidates)
+            if pool_total > 0:
+                inter_share = len(inter_matrix_candidates) / float(pool_total)
+                if len(inter_matrix_candidates) == 0:
+                    void_note_problem(
+                        'w = {:.2f} unreachable: every matrix element touches a fiber'.format(
+                            target_near_ratio), 'w')
+                elif inter_share < (1.0 - target_near_ratio) * 0.5:
+                    void_note_problem(
+                        'w = {:.2f} hard to reach: only {:.1f}% of matrix elements are inter-matrix'.format(
+                            target_near_ratio, inter_share * 100.0), 'w')
+
     # ========== 7. Void Generation ==========
-    print("\n[Step 7] Generating voids with seed growth algorithm...")
     _void_gen_start = time.time()
+    _set_periodic_box(box_extent)
 
     all_voids, void_statistics = seed_growth_void_generation(
         part=part,
-        matrix_element_labels=matrix_element_labels,
+        matrix_element_labels=placeable_matrix_labels,
         near_fiber_candidates=near_fiber_candidates,
         inter_matrix_candidates=inter_matrix_candidates,
         element_volume_dict=element_volume_dict,
@@ -2783,69 +2779,54 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
     )
 
     _void_gen_elapsed = time.time() - _void_gen_start
-    print("\n[Void Generation Time] {:.1f} s ({:.1f} min)".format(
-        _void_gen_elapsed, _void_gen_elapsed / 60.0))
-    
-    # ========== 8.  ==========
-    print("\n[Step 8] Creating void sets...")
+    _set_periodic_box(None)
+
     all_void_labels = []
     near_fiber_void_labels = []
     inter_matrix_void_labels = []
-    
+
     all_voids = _normalize_void_element_lists(all_voids)
     all_voids = [v for v in all_voids if v['elements']]
-    
+    # a void that crosses the boundary is laid out contiguously for the
+    # statistics; its centroid is reported inside the RVE box
+    stat_centroid_dict = _unwrap_void_centroids(all_voids, element_centroid_dict,
+                                                element_neighbors_dict, box_min, box_extent)
+
     for void_info in all_voids:
-        
-        # 
+
         if not void_info['elements']:
             continue
-        
+
         void_labels = void_info['elements']
         void_type = void_info['type']
         all_void_labels.extend(void_labels)
-        
+
         if void_type == 'near_fiber':
             near_fiber_void_labels.extend(void_labels)
         else:
             inter_matrix_void_labels.extend(void_labels)
-    
-    #print("  Total void elements: {}".format(len(all_void_labels)))
-    #print("  Near-fiber void elements: {}".format(len(near_fiber_void_labels)))
-    #print("  Inter-matrix void elements: {}".format(len(inter_matrix_void_labels)))
-    # 
-    # 
+
     num_valid = void_statistics.get('num_valid_voids', void_statistics.get('num_voids', 0))
     num_total = void_statistics.get('num_voids', 0)
-    
+
     if num_valid < num_total:
-        print("  WARNING: Expected {} voids, but only {} are valid".format(
-            num_total, num_valid))
-    '''
-    if void_statistics['num_valid_voids'] < void_statistics['num_voids']:
-        print("  WARNING: Expected {} voids, but only {} are valid".format(
-            void_statistics['num_voids'], void_statistics['num_valid_voids']))
-    '''
-    
+        void_note_problem('only {} of {} voids are valid'.format(num_valid, num_total))
+
     if all_void_labels:
         part.Set(elements=part.elements.sequenceFromLabels(_abaqus_label_tuple(all_void_labels)), name='Set-void')
         part.SectionAssignment(region=part.sets['Set-void'], sectionName='air')
-        #print("  Set-void created and section assigned.")
-        
-        # 
+
         non_void_element_labels = list(set(matrix_element_labels) - set(all_void_labels))
-        part.Set(elements=part.elements.sequenceFromLabels(labels=_abaqus_label_tuple(non_void_element_labels)), 
+        part.Set(elements=part.elements.sequenceFromLabels(labels=_abaqus_label_tuple(non_void_element_labels)),
                  name='Set-Matrix-element-novoid')
-        
+
         if near_fiber_void_labels:
-            part.Set(elements=part.elements.sequenceFromLabels(_abaqus_label_tuple(near_fiber_void_labels)), 
+            part.Set(elements=part.elements.sequenceFromLabels(_abaqus_label_tuple(near_fiber_void_labels)),
                      name='Set-near-fiber-void')
-            #print("  Set-near-fiber-void created.")
-        
+
         if inter_matrix_void_labels:
-            part.Set(elements=part.elements.sequenceFromLabels(_abaqus_label_tuple(inter_matrix_void_labels)), 
+            part.Set(elements=part.elements.sequenceFromLabels(_abaqus_label_tuple(inter_matrix_void_labels)),
                      name='Set-inter-matrix-void')
-            #print("  Set-inter-matrix-void created.")
             # ========== Create individual void sets ==========
         for void_idx, void_info in enumerate(all_voids):
             if not void_info['elements']:
@@ -2854,76 +2835,219 @@ def _create_void_set_impl(model_for_void, part_for_void, target_vf_void,
             part.Set(
                 elements=part.elements.sequenceFromLabels(_abaqus_label_tuple(void_info['elements'])),
                 name=void_set_name)
-        #print("  Created {} individual void sets (Set-void-1 .. Set-void-{})".format(len(all_voids), len(all_voids)))
-            
+
     else:
-        print("  WARNING: No void elements generated!")
-    
-    # ========== RVE2D ==========
-    bbox = part.queryGeometry()
-    # 3D
+        void_note_problem('no void elements generated')
+
+    bbox = part.queryGeometry(printResults=False)
     rve_x_3d = bbox['boundingBox'][1][0] - bbox['boundingBox'][0][0]  # X
     rve_y_3d = bbox['boundingBox'][1][1] - bbox['boundingBox'][0][1]  # Y
     rve_z_3d = bbox['boundingBox'][1][2] - bbox['boundingBox'][0][2]  # Z
-    
-    # ========== 2D ==========
-    # 2Dx3D-Z2Dy3DY
+
     rve_a = rve_z_3d  # 2D = 3DZ
     rve_b = rve_y_3d  # 2D = 3DY
     rve_c = rve_x_3d  #  = 3DX
-    
+
     if all_voids:
         if fiber_coords is not None:  # ←
             output_void_statistics(model_for_void, part, all_voids, void_statistics,
                               rve_volume, target_vf_void, element_volume_dict,
-                              element_centroid_dict, near_fiber_candidates,
+                              stat_centroid_dict, near_fiber_candidates,
                               rve_a, rve_b, rve_c,  # ← 2D
                               void_distribution_method, void_distribution_value,
                               void_size_method, void_theta_value, void_priority,
                               fiber_coords,
                               element_nodes_dict=element_nodes_dict,
-                              fiber_radius=fiber_radius)
+                              fiber_radius=fiber_radius,
+                              mesh_cache=mesh_cache)
         else:
-            print("\n  Skipping detailed statistics (no fiber coordinates available)")
-    
-    # 
-    if all_voids:
-        actual_near_ratio = len(near_fiber_void_labels) / len(all_void_labels) if all_void_labels else 0
-        
-        #  sum(v['volume'] for v in all_voids)
-        total_void_vol = 0.0
-        for v in all_voids:
-            total_void_vol += v['volume']
-        actual_void_vf = total_void_vol / rve_volume * 100
-        
-        print("\n========== VOID INSERTION COMPLETE ==========")
-        print("  Number of voids (theta): {}".format(len(all_voids)))
-        print("  Actual void Vf: {:.4f}%".format(actual_void_vf))
-        print("  Near-fiber ratio: {:.2f}%".format(actual_near_ratio * 100))
-        print("  Inter-matrix ratio: {:.2f}%".format((1 - actual_near_ratio) * 100))
-    print("=" * 50 + "\n")
+            void_note_problem('statistics skipped (no fiber coordinates)')
+
+    if not all_voids:
+        return None
+
+    total_void_vol = 0.0
+    near_fiber_vol = 0.0
+    for v in all_voids:
+        total_void_vol += v['volume']
+        if v['type'] == 'near_fiber':
+            near_fiber_vol += v['volume']
+    actual_void_vf = total_void_vol / rve_volume * 100
+    # volume-based w, matching the value reported in void_summary_report.txt
+    actual_near_ratio = void_statistics.get('realized_w')
+    if actual_near_ratio is None:
+        actual_near_ratio = near_fiber_vol / total_void_vol if total_void_vol > 0 else 0.0
+
+    return {
+        'model' : model_for_void,
+        'voids' : len(all_voids),
+        'vf'    : actual_void_vf,
+        'w'     : actual_near_ratio,
+        'time'  : time.time() - _void_model_start,
+        'status': void_run_status(),
+        'target_vf': requested_vf_void,
+        'generation_time': _void_gen_elapsed,
+    }
 
 def calculate_periodic_distance_3d(point1, point2, a, b, c):
     """
     3D
-    
+
     Args:
         point1, point2:  (x, y, z)
         a, b, c: RVEx, y, z
-    
+
     Returns:
-        
+
     """
     dx = abs(point1[0] - point2[0])
     dy = abs(point1[1] - point2[1])
     dz = abs(point1[2] - point2[2])
-    
-    # 
+
     dx = min(dx, a - dx)
     dy = min(dy, b - dy)
     dz = min(dz, c - dz)
-    
+
     return math.sqrt(dx**2 + dy**2 + dz**2)
+
+_VOID_PERIODIC_BOX = None   # extents (Lx, Ly, Lz) while a void run is active
+
+
+def _set_periodic_box(extent):
+    global _VOID_PERIODIC_BOX
+    _VOID_PERIODIC_BOX = None if extent is None else np.asarray(extent, dtype=float)
+
+
+def _min_image(diff):
+    """Shortest periodic image of a displacement (or array of displacements)."""
+    box = _VOID_PERIODIC_BOX
+    if box is None:
+        return diff
+    return diff - box * np.round(diff / box)
+
+
+def _periodic_node_canon(node_coord_dict, box_min, box_max, axes=(1, 2)):
+    """Representative label for every node so that nodes coinciding under the
+    RVE periodicity (opposite faces, edges, corners) share one label.  Element
+    node sets built from these labels make elements on opposite faces share a
+    face, so voids grow across the boundary and matrix regions are connected
+    the way the periodic boundary conditions see them.  Only the cross-section
+    directions (Y, Z) are paired: along the fibre axis X the RVE is one or a
+    few element layers thick and pairing would make an element its own
+    neighbour.  Returns (canon, pairs)."""
+    labels = list(node_coord_dict.keys())
+    coords = np.array([node_coord_dict[l] for l in labels], dtype=float)
+    box_min = np.asarray(box_min, dtype=float)
+    box_max = np.asarray(box_max, dtype=float)
+    extent = box_max - box_min
+    parent = dict((l, l) for l in labels)
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    pairs = 0
+    grid = 1e-6 * float(max(extent)) if float(max(extent)) > 0 else 1.0
+    for d in axes:
+        L = float(extent[d])
+        if L <= 0.0:
+            continue
+        face_tol = 1e-6 * L
+        on_min = np.where(np.abs(coords[:, d] - box_min[d]) <= face_tol)[0]
+        on_max = np.where(np.abs(coords[:, d] - box_max[d]) <= face_tol)[0]
+        if len(on_min) == 0 or len(on_max) == 0:
+            continue
+        others = [k for k in range(3) if k != d]
+        lookup = {}
+        for i in on_min:
+            key = (int(round(coords[i, others[0]] / grid)), int(round(coords[i, others[1]] / grid)))
+            lookup.setdefault(key, labels[i])
+        for j in on_max:
+            key = (int(round(coords[j, others[0]] / grid)), int(round(coords[j, others[1]] / grid)))
+            partner = lookup.get(key)
+            if partner is None:
+                for dk0 in (-1, 0, 1):
+                    for dk1 in (-1, 0, 1):
+                        partner = lookup.get((key[0] + dk0, key[1] + dk1))
+                        if partner is not None:
+                            break
+                    if partner is not None:
+                        break
+            if partner is None:
+                continue
+            ra, rb = find(labels[j]), find(partner)
+            if ra != rb:
+                parent[max(ra, rb)] = min(ra, rb)
+                pairs += 1
+    return dict((l, find(l)) for l in labels), pairs
+
+
+def _unwrap_void_centroids(all_voids, element_centroid_dict, element_neighbors_dict, box_min, extent):
+    """Element centroids with every void laid out contiguously (minimum image
+    from element to face-neighbour), plus each void's centroid wrapped back
+    into the RVE box.  Elements outside voids keep their coordinates."""
+    box_min = np.asarray(box_min, dtype=float)
+    extent = np.asarray(extent, dtype=float)
+    unwrapped = dict(element_centroid_dict)
+    for void_info in all_voids:
+        elements = void_info['elements']
+        if not elements:
+            continue
+        members = set(elements)
+        start = elements[0]
+        pos = {start: np.array(element_centroid_dict[start], dtype=float)}
+        queue = deque([start])
+        while queue:
+            current = queue.popleft()
+            for nb in element_neighbors_dict.get(current, ()):
+                if nb in members and nb not in pos:
+                    step = np.array(element_centroid_dict[nb], dtype=float) - pos[current]
+                    step = step - extent * np.round(step / extent)
+                    pos[nb] = pos[current] + step
+                    queue.append(nb)
+        for label in elements:
+            if label not in pos:      # not reachable (should not happen): keep raw coordinates
+                pos[label] = np.array(element_centroid_dict[label], dtype=float)
+            unwrapped[label] = pos[label]
+        mean = np.mean([pos[label] for label in elements], axis=0)
+        void_info['centroid'] = box_min + np.mod(mean - box_min, extent)
+    return unwrapped
+
+
+def _read_element_node_labels(part, node_index_to_label):
+    """{element label: tuple of node labels} for every element of the part.
+
+    Uses MeshElement.connectivity (node indices into part.nodes) and the
+    index->label list built while reading the nodes.  The mapping is verified
+    against getNodes() on a sample of elements; if it does not hold, the slow
+    but general getNodes() path is used for the whole part.
+    """
+    result = {}
+    elements = part.elements
+    use_connectivity = True
+    try:
+        n_check = min(len(elements), 8)
+        for k in range(n_check):
+            element = elements[k]
+            via_index = tuple([node_index_to_label[i] for i in element.connectivity])
+            via_nodes = tuple([n.label for n in element.getNodes()])
+            if via_index != via_nodes:
+                use_connectivity = False
+                break
+        if use_connectivity:
+            for element in elements:
+                result[element.label] = tuple([node_index_to_label[i] for i in element.connectivity])
+    except Exception:
+        use_connectivity = False
+
+    if not use_connectivity:
+        result = {}
+        for element in elements:
+            result[element.label] = tuple([n.label for n in element.getNodes()])
+    return result, use_connectivity
+
 
 def _tet_or_hex_volume(coords):
     """
@@ -2980,60 +3104,234 @@ def _tet_or_hex_volume(coords):
     # This should rarely fire; if it does, the caller may log a warning.
     raise NotImplementedError("Unsupported element type with {} nodes".format(n))
 
-# 
+class _LabelList(list):
+    """A list of element labels that also answers ``x in labels`` in O(1).
+
+    The void generators keep the candidate pools as lists (they are shuffled,
+    sampled and indexed) but test membership against them inside their inner
+    loops; on a large mesh a plain list makes every such test a full scan.
+    """
+
+    def __init__(self, seq=()):
+        list.__init__(self, seq)
+        self._set = set(self)
+
+    def __contains__(self, item):
+        return item in self._set
+
+    def append(self, item):
+        list.append(self, item)
+        self._set.add(item)
+
+    def extend(self, seq):
+        seq = list(seq)
+        list.extend(self, seq)
+        self._set.update(seq)
+
+    def insert(self, index, item):
+        list.insert(self, index, item)
+        self._set.add(item)
+
+    def remove(self, item):
+        list.remove(self, item)
+        self._set = set(self)
+
+    def pop(self, *args):
+        item = list.pop(self, *args)
+        self._set = set(self)
+        return item
+
+    def __delitem__(self, key):
+        list.__delitem__(self, key)
+        self._set = set(self)
+
+    def __setitem__(self, key, value):
+        list.__setitem__(self, key, value)
+        self._set = set(self)
+
+    # Python 2 routes slice assignment/deletion through these two
+    def __setslice__(self, i, j, seq):
+        list.__setslice__(self, i, j, seq)
+        self._set = set(self)
+
+    def __delslice__(self, i, j):
+        list.__delslice__(self, i, j)
+        self._set = set(self)
+
+    def __iadd__(self, seq):
+        self.extend(seq)
+        return self
+
+
+def _label_set(labels):
+    """Return a set view of a label collection without copying it when the
+    collection already supports O(1) membership."""
+    if isinstance(labels, (set, frozenset)):
+        return labels
+    fast = getattr(labels, '_set', None)
+    if fast is not None:
+        return fast
+    return set(labels)
+
+
+def _connectivity_removable(element_set, element_neighbors_dict, empty_ok=False):
+    """Elements whose removal leaves the rest of ``element_set`` face-connected.
+
+    Gives exactly the elements for which
+    ``_is_connected(element_set - {e}, element_neighbors_dict)`` is True, but in
+    one traversal of the cluster instead of one BFS per element.  ``empty_ok``
+    reproduces ``_is_connected(set())`` being True for a one-element cluster.
+    """
+    elems = set(element_set)
+    n = len(elems)
+    if n == 0:
+        return set()
+    if n == 1:
+        return set(elems) if empty_ok else set()
+
+    # connected components of the induced subgraph
+    components = []
+    seen = set()
+    for start in elems:
+        if start in seen:
+            continue
+        comp = set([start])
+        stack = [start]
+        while stack:
+            current = stack.pop()
+            for nb in element_neighbors_dict.get(current, ()):
+                if nb in elems and nb not in comp:
+                    comp.add(nb)
+                    stack.append(nb)
+        seen |= comp
+        components.append(comp)
+
+    if len(components) >= 3:
+        return set()
+    if len(components) == 2:
+        # only a one-element component can go without leaving two pieces behind
+        return set([e for comp in components if len(comp) == 1 for e in comp])
+
+    # single component: every element that is not an articulation point
+    root = next(iter(elems))
+    disc = {root: 0}
+    low = {root: 0}
+    counter = 1
+    root_children = 0
+    articulation = set()
+    stack = [(root, None, iter([nb for nb in element_neighbors_dict.get(root, ()) if nb in elems]))]
+    while stack:
+        v, parent, it = stack[-1]
+        advanced = False
+        for w in it:
+            if w == parent:
+                continue
+            if w not in disc:
+                disc[w] = counter
+                low[w] = counter
+                counter += 1
+                if v == root:
+                    root_children += 1
+                stack.append((w, v, iter([nb for nb in element_neighbors_dict.get(w, ()) if nb in elems])))
+                advanced = True
+                break
+            if disc[w] < low[v]:
+                low[v] = disc[w]
+        if not advanced:
+            stack.pop()
+            if stack:
+                u = stack[-1][0]
+                if low[v] < low[u]:
+                    low[u] = low[v]
+                if u != root and low[v] >= disc[u]:
+                    articulation.add(u)
+    if root_children > 1:
+        articulation.add(root)
+    return elems - articulation
+
+
+def _void_node_index(all_voids, element_nodes_dict):
+    """node label -> number of voids that own an element touching that node,
+    plus the node set of every void (keyed by id(void))."""
+    counts = {}
+    nodes_of = {}
+    for void_info in all_voids:
+        nodes = set()
+        for element_label in void_info['elements']:
+            nodes.update(element_nodes_dict.get(element_label, ()))
+        nodes_of[id(void_info)] = nodes
+        for node_label in nodes:
+            counts[node_label] = counts.get(node_label, 0) + 1
+    return counts, nodes_of
+
+
+def _touches_other_void(node_labels, counts, own_nodes):
+    """True when any of node_labels belongs to a void other than the one whose
+    node set is own_nodes (same test as ``node_labels & other_void_nodes``)."""
+    for node_label in node_labels:
+        c = counts.get(node_label, 0)
+        if node_label in own_nodes:
+            c -= 1
+        if c > 0:
+            return True
+    return False
+
+
 def will_create_island(new_element, current_void_elements, element_neighbors_dict,
                        matrix_element_labels):
-    """"""
+    """Return the matrix elements that would be cut off from the rest of the
+    matrix if new_element were added to the current void (empty list = none)."""
     test_void = set(current_void_elements) | {new_element}
     matrix_set = set(matrix_element_labels)
     non_void_matrix = matrix_set - test_void
-    
+
     if len(non_void_matrix) == 0:
-        return []  # 
-    
+        return []
+
     # BFS
     start = next(iter(non_void_matrix))
     visited = {start}
     queue = deque([start])
-    
+
     while queue:
         current = queue.popleft()
         neighbors = element_neighbors_dict.get(current, set())
-        
+
         for neighbor in neighbors:
             if neighbor in non_void_matrix and neighbor not in visited:
                 visited.add(neighbor)
                 queue.append(neighbor)
-    
-    # ****
+
     isolated = non_void_matrix - visited
     return list(isolated)
 
 ###
 def will_isolate_fiber(new_element, current_void_elements, element_neighbors_dict,
                        fiber_elements, matrix_element_labels):
-    """"""
+    """Return True when adding new_element to the void would leave a fibre
+    element with no remaining matrix neighbour."""
     test_void = set(current_void_elements) | {new_element}
-    matrix_set = set(matrix_element_labels)
+    matrix_set = _label_set(matrix_element_labels)
+    fiber_set = _label_set(fiber_elements)
     new_elem_neighbors = element_neighbors_dict.get(new_element, set())
-    
+
     for neighbor in new_elem_neighbors:
-        if neighbor in fiber_elements:
+        if neighbor in fiber_set:
             fiber_neighbors = element_neighbors_dict.get(neighbor, set())
             matrix_neighbor_count = 0
             for fn in fiber_neighbors:
                 if fn in matrix_set and fn not in test_void:
                     matrix_neighbor_count += 1
             if matrix_neighbor_count == 0:
-                return True  # 
-    return False  # 
+                return True
+    return False
 
-### 
+###
 def build_element_adjacency_by_face(part, element_labels, element_nodes_dict):
     """
     Pure-Python adjacency build using a pre-cached {label: set(node_labels)} dict.
     No Abaqus API calls inside the loop — runs ~10-100x faster on large meshes.
-    
+
     Adjacency rule: two elements are neighbors if they share >= 3 nodes
     (i.e. a full face for linear tet/hex elements).
     """
@@ -3066,32 +3364,51 @@ def grow_single_void_with_face_check(seed_label, seed_type, element_volume_dict,
                                      used_elements, target_elements, avg_element_volume,
                                      available_near_fiber, available_inter_matrix,
                                      void_priority, target_near_ratio, part, used_void_nodes,
-                                     fiber_nodes, element_nodes_dict):
+                                     fiber_nodes, element_nodes_dict, matrix_label_set=None):
     """
     Grow a single void cluster from a seed element. When a beta shape factor
     is active (registered via set_active_void_beta_ctx), candidate weighting
     is biased by an ellipsoid envelope; otherwise the legacy distance-only
     rule is used.
     """
-    
+
     void_elements = {seed_label}
     void_type = seed_type
     seed_centroid = element_centroid_dict[seed_label]
-    
+
     target_volume = target_elements * avg_element_volume
     current_volume = element_volume_dict[seed_label]
-    
+
     max_growth_iterations = int(target_elements) * 5
-    
-    # 
+
     strict_distribution = False
     if target_near_ratio is not None:
         if target_near_ratio == 0.0 or target_near_ratio == 1.0:
             strict_distribution = True
-    
-    # void
+
     current_void_nodes = set(element_nodes_dict.get(seed_label, set()))
     current_void_nodes |= element_nodes_dict.get(seed_label, set())
+
+    if matrix_label_set is None:
+        matrix_label_set = frozenset(element_volume_dict.keys())
+
+    # Nodes owned by other voids.  Every element accepted below shares no node
+    # with them, so this set does not change while the void grows, and the
+    # boundary can be updated element by element instead of being rebuilt.
+    other_voids_nodes = used_void_nodes - current_void_nodes
+
+    def _boundary_eligible(neighbor):
+        if neighbor in void_elements or neighbor in used_elements:
+            return False
+        # Use pre-cached node dict to check shared nodes with other voids
+        if element_nodes_dict.get(neighbor, set()) & other_voids_nodes:
+            return False
+        return True
+
+    boundary_neighbors = set()
+    for neighbor in element_neighbors_dict.get(seed_label, set()):
+        if _boundary_eligible(neighbor):
+            boundary_neighbors.add(neighbor)
 
     # ---- Resolve the per-void envelope (beta shape factor) ----
     _beta_ctx = get_active_void_beta_ctx()
@@ -3112,34 +3429,17 @@ def grow_single_void_with_face_check(seed_label, seed_type, element_volume_dict,
     for grow_iter in range(max_growth_iterations):
         if current_volume >= target_volume:
             break
-        
+
         rejected_in_this_growth = set()
-        
-        # 
-        boundary_neighbors = set()
-        for elem_label in void_elements:
-            neighbors = element_neighbors_dict.get(elem_label, set())
-            for neighbor in neighbors:
-                if neighbor in void_elements or neighbor in used_elements:
-                    continue
-                
-                # Use pre-cached node dict to check shared nodes with other voids
-                neighbor_nodes = element_nodes_dict.get(neighbor, set())
-                other_voids_nodes = used_void_nodes - current_void_nodes
-                if neighbor_nodes & other_voids_nodes:
-                    continue
-                
-                boundary_neighbors.add(neighbor)
-        
+
         if not boundary_neighbors:
             break
-        
-        # 
+
         valid_candidates = []
-        
+
         for neighbor in boundary_neighbors:
             is_near_fiber = neighbor in available_near_fiber
-            
+
             if strict_distribution:
                 if void_type == 'near_fiber' and not is_near_fiber:
                     continue
@@ -3152,61 +3452,63 @@ def grow_single_void_with_face_check(seed_label, seed_type, element_volume_dict,
                     # Void type is determined after growth by fiber contact, not during growth.
                     # Only restrict inter-matrix voids from touching near-fiber elements
                     # when strict_distribution is not active.
-                    if void_type == 'inter_matrix' and is_near_fiber and target_near_ratio == 0.0:
-                        # w=0: pure inter-matrix, strictly exclude fiber-adjacent elements
+                    if (void_type == 'inter_matrix' and is_near_fiber
+                            and target_near_ratio is not None and target_near_ratio < 1.0):
+                        # An inter-matrix void that takes a fiber-adjacent element
+                        # becomes fiber-adjacent by definition (a cluster is
+                        # fiber-adjacent if any element touches a fiber), and on a
+                        # dense packing that drives w to 1 whatever the target.
                         continue
                     valid_candidates.append(neighbor)
                 elif void_priority == 2:
                     valid_candidates.append(neighbor)
                 else:
                     valid_candidates.append(neighbor)
-        
+
         if not valid_candidates:
             if void_priority == 2 and not strict_distribution:
                 valid_candidates = list(boundary_neighbors)
             else:
                 break
-        
+
         if not valid_candidates:
             break
-        
+
         available_candidates = [c for c in valid_candidates if c not in rejected_in_this_growth]
-        
+
         if not available_candidates:
             break
-        
+
         if _use_beta_here and envelope_axes is not None and rotation_matrix is not None:
             selected = beta_weighted_selection(
                 valid_candidates, seed_centroid, element_centroid_dict,
                 rotation_matrix, envelope_axes
             )
         else:
-            selected = distance_weighted_selection_debug(
+            selected = distance_weighted_selection(
                 valid_candidates, seed_centroid, element_centroid_dict
             )
-        
+
         if selected is None:
             break
-        
-        # ==========  ==========
+
         if will_isolate_fiber(selected, void_elements, element_neighbors_dict,
-                             fiber_nodes, set(element_volume_dict.keys())):
+                             fiber_nodes, matrix_label_set):
             rejected_in_this_growth.add(selected)
             continue
-        
+
         new_volume = current_volume + element_volume_dict[selected]
-        
+
         if new_volume > target_volume:
             diff_with = abs(new_volume - target_volume)
             diff_without = abs(current_volume - target_volume)
             if diff_with <= diff_without:
-                # 
                 if not will_isolate_fiber(selected, void_elements, element_neighbors_dict,
-                                      fiber_nodes, set(element_volume_dict.keys())):
+                                      fiber_nodes, matrix_label_set):
                     void_elements.add(selected)
                     current_volume = new_volume
-                    
-                    # 
+                    boundary_neighbors.discard(selected)
+
                     try:
                         current_void_nodes.update(element_nodes_dict.get(selected, set()))
                         for node in sel_elem.getNodes():
@@ -3214,49 +3516,51 @@ def grow_single_void_with_face_check(seed_label, seed_type, element_volume_dict,
                     except:
                         pass
             break
-        
+
         void_elements.add(selected)
         current_volume = new_volume
-        
-        # 
+        boundary_neighbors.discard(selected)
+        for neighbor in element_neighbors_dict.get(selected, set()):
+            if _boundary_eligible(neighbor):
+                boundary_neighbors.add(neighbor)
+
         try:
             current_void_nodes.update(element_nodes_dict.get(selected, set()))
             for node in sel_elem.getNodes():
                 current_void_nodes.add(node.label)
         except:
             pass
-        
+
         if void_priority == 2 and not strict_distribution:
             if selected in available_near_fiber:
                 void_type = 'near_fiber'
-    
+
     return void_elements, void_type
 
-def _initialize_void_generation(near_fiber_candidates, inter_matrix_candidates, 
+def _initialize_void_generation(near_fiber_candidates, inter_matrix_candidates,
                                 num_voids, target_near_ratio, void_size_method, void_theta_value):
-    """"""
+    """Set up the bookkeeping (void list, used elements/nodes, per-pool void
+    targets) for one void-generation run."""
     all_voids = []
     used_elements = set()
     used_void_nodes = set()
-    
-    # 
+
     if target_near_ratio is not None:
         target_near_voids = int(num_voids * target_near_ratio + 0.5)
         target_inter_voids = num_voids - target_near_voids
     else:
         target_near_voids = None
         target_inter_voids = None
-    
+
     current_near_voids = 0
     current_inter_voids = 0
     current_total_volume = 0.0
-    
+
     available_near_fiber = set(near_fiber_candidates)
     available_inter_matrix = set(inter_matrix_candidates)
-    
-    # 
+
     strict_count_control = (void_size_method == 2)
-    
+
     return {
         'all_voids': all_voids,
         'used_elements': used_elements,
@@ -3274,16 +3578,14 @@ def _initialize_void_generation(near_fiber_candidates, inter_matrix_candidates,
 def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_volume_dict=None, element_centroid_dict=None):
     """
     voids
-    
-    
+
+
         valid_voids: voids
-        void_statistics: 
+        void_statistics:
     """
-    # voids
     valid_voids = [v for v in all_voids if v['elements']]
-    
+
     if not valid_voids:
-        # voids
         void_statistics = {
             'num_voids': 0,
             'num_valid_voids': 0,
@@ -3297,12 +3599,10 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
             'centroids': []
         }
         return valid_voids, void_statistics
-    
-    # ========== voids ==========
+
     # ========== Separate connected voids instead of merging ==========
     if element_neighbors_dict is not None:
-        print("\n--- Checking and separating connected voids ---")
-        
+
         max_separation_rounds = 30
         for sep_round in range(max_separation_rounds):
             # Build element -> void index mapping
@@ -3312,7 +3612,7 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
                 for elem in v['elements']:
                     all_void_elements.add(elem)
                     elem_to_void_idx[elem] = idx
-            
+
             # Find bridge elements: elements face-adjacent to a different void
             bridges = []  # (void_idx, elem_id, neighbor_void_idx)
             for idx, v in enumerate(valid_voids):
@@ -3322,11 +3622,10 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
                             nb_idx = elem_to_void_idx[nb]
                             if nb_idx != idx:
                                 bridges.append((idx, elem, nb_idx))
-            
+
             if not bridges:
-                print("   No connected voids detected (round {})".format(sep_round + 1))
                 break
-            
+
             # Group bridges by void pair
             pair_bridges = {}
             for v_idx, elem, nb_idx in bridges:
@@ -3334,20 +3633,18 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
                 if pair_key not in pair_bridges:
                     pair_bridges[pair_key] = []
                 pair_bridges[pair_key].append((v_idx, elem))
-            
-            print("   Round {}: found {} connected void pairs".format(
-                sep_round + 1, len(pair_bridges)))
-            
+
+
             # Compute target volume per void for balanced separation
             total_vol = sum([v['volume'] for v in valid_voids if v['elements']])
             num_valid = len([v for v in valid_voids if v['elements']])
             avg_vol = total_vol / max(num_valid, 1)
-            
+
             removed_any = False
             for (idx_a, idx_b), bridge_list in pair_bridges.items():
                 va = valid_voids[idx_a]
                 vb = valid_voids[idx_b]
-                
+
                 # Remove from whichever is MORE above average (or less below)
                 # This pushes both voids toward the average size
                 dev_a = va['volume'] - avg_vol
@@ -3356,16 +3653,16 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
                     remove_from_idx = idx_a
                 else:
                     remove_from_idx = idx_b
-                
+
                 remove_void = valid_voids[remove_from_idx]
                 remove_set = set(remove_void['elements'])
-                
+
                 # Find elements in remove_void that are face-adjacent to the other void
                 elems_to_remove = set()
                 for v_idx, elem in bridge_list:
                     if v_idx == remove_from_idx:
                         elems_to_remove.add(elem)
-                
+
                 if not elems_to_remove:
                     # Bridge is on the other side; collect from the other direction
                     other_idx = idx_b if remove_from_idx == idx_a else idx_a
@@ -3375,7 +3672,7 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
                             if nb in other_set:
                                 elems_to_remove.add(elem)
                                 break
-                
+
                 # Remove bridge elements one by one, checking connectivity
                 for elem in list(elems_to_remove):
                     remaining = remove_set - {elem}
@@ -3385,23 +3682,21 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
                         remove_void['elements'].remove(elem)
                         remove_set = remaining
                         removed_any = True
-                
+
                 # Recalculate volume and centroid
                 if remove_void['elements']:
                     remove_void['volume'] = sum(
                         [element_volume_dict.get(e, 0.0) for e in remove_void['elements']])
                     remove_void['centroid'] = np.mean(
                         [element_centroid_dict[e] for e in remove_void['elements']], axis=0)
-            
+
             if not removed_any:
-                print("   Cannot separate further — accepting result")
+                void_note_problem('connected voids could not be separated further')
                 break
-        
+
         # Remove any voids that became empty
         valid_voids = [v for v in valid_voids if v['elements']]
-        print("   Final void count after separation: {}".format(len(valid_voids)))
-    
-    # ==========  ==========
+
     num_near_fiber = 0
     num_inter_matrix = 0
     near_fiber_volume = 0.0
@@ -3409,28 +3704,24 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
     total_volume = 0.0
     volumes = []
     centroids = []
-    
+
     for v in valid_voids:
-        # 
         if v['type'] == 'near_fiber':
             num_near_fiber += 1
             near_fiber_volume += v['volume']
         else:
             num_inter_matrix += 1
             inter_matrix_volume += v['volume']
-        
-        # 
+
         total_volume += v['volume']
         volumes.append(v['volume'])
         centroids.append(v['centroid'])
-    
-    # ========== w ==========
+
     if total_volume > 0:
         realized_w = near_fiber_volume / total_volume
     else:
         realized_w = 0.0
-    
-    # ==========  ==========
+
     void_statistics = {
         'num_voids': len(valid_voids),
         'num_valid_voids': len(valid_voids),
@@ -3443,215 +3734,139 @@ def _finalize_void_statistics(all_voids, element_neighbors_dict=None, element_vo
         'volumes': volumes,
         'centroids': centroids
     }
-    
+
     return valid_voids, void_statistics
 
-#==============================================================================
-# 
-#==============================================================================
 def cluster_adjacent_void_elements(void_set, elem_neighbors):
     """
     clusters
-    
-    
+
+
         void_set: set of void element IDs
         elem_neighbors: dict {elem_id: set of neighbor IDs}
-    
-    
+
+
         clusters: list of sets, setcluster
                  : [{1,2,3}, {5,6}, {10}]
     """
     visited = set()
     clusters = []
-    
+
     for void_elem in void_set:
         if void_elem in visited:
             continue
-        
-        # BFSvoid
+
         cluster = set()
         queue = deque([void_elem])
-        
+
         while queue:
             current = queue.popleft()   # O(1)
             if current in visited:
                 continue
-            
+
             visited.add(current)
             cluster.add(current)
-            
-            # void
+
             if current in elem_neighbors:
                 for neighbor in elem_neighbors[current]:
                     if neighbor in void_set and neighbor not in visited:
                         queue.append(neighbor)
-        
+
         clusters.append(cluster)
-    
+
     return clusters
 
-# ========== voids ==========
-def try_remove_elements_from_voids(all_voids, element_volume_dict, element_centroid_dict,
-                                   element_neighbors_dict, used_elements, used_void_nodes, part):
-    """
-    voids
-    
-    voidtheta
-    
-    TrueFalse
-    """
-    # void
-    all_voids.sort(key=lambda v: v['volume'], reverse=True)
-    
-    for void_info in all_voids:
-        if len(void_info['elements']) <= 1:
-            continue  # 
-        
-        void_elements = set(void_info['elements'])
-        
-        # void
-        edge_elements = []
-        for elem_id in void_elements:
-            neighbors = element_neighbors_dict.get(elem_id, set())
-            neighbors_in_void = neighbors & void_elements
-            neighbors_outside_void = neighbors - void_elements
-            
-            if len(neighbors_outside_void) > 0:
-                edge_elements.append(elem_id)
-        
-        if not edge_elements:
-            continue
-        
-        # 
-        edge_elements.sort(key=lambda e: element_volume_dict.get(e, 0.0), reverse=True)
-        
-        for candidate in edge_elements:
-            # void
-            remaining_void = void_elements - {candidate}
-            
-            if not _is_connected(remaining_void, element_neighbors_dict):
-                continue  # 
-            
-            # 
-            # 
-            
-            # 
-            void_info['elements'].remove(candidate)
-            void_info['volume'] -= element_volume_dict.get(candidate, 0.0)
-            
-            # used_elements
-            used_elements.discard(candidate)
-            
-            # used_void_nodes
-            elem_nodes = element_nodes_dict.get(candidate, set())
-            
-            # void
-            for node_label in elem_nodes:
-                still_used = False
-                for other_void in all_voids:
-                    for other_elem_id in other_void['elements']:
-                        if other_elem_id == candidate:
-                            continue
-                        try:
-                            other_nodes = element_nodes_dict.get(other_elem_id, set())
-                            if node_label in other_nodes:
-                                still_used = True
-                                break
-                        except:
-                            continue
-                    if still_used:
-                        break
-                
-                if not still_used:
-                    used_void_nodes.discard(node_label)
-            
-            # 
-            if len(void_info['elements']) > 0:
-                void_info['centroid'] = np.mean(
-                    [element_centroid_dict[e] for e in void_info['elements']], axis=0)
-            
-            return True  # 
-    
-    return False  # 
 
-# ======================================================================
-#  - 2829
-# ======================================================================
 
 def post_process_islands_and_volume(all_voids, element_neighbors_dict, element_volume_dict,
                                     element_centroid_dict, matrix_element_labels, part,
                                     target_volume, used_elements, fiber_nodes, fiber_element_labels, element_nodes_dict=None):
-    """
-    99%-101%
-    """
-    
-    #print("\n========== POST-PROCESSING: ISLAND DETECTION & VOLUME ADJUSTMENT ==========")
-    
+    """Fill matrix islands created by the voids and trim or grow the voids until
+    the total void volume is within 99%-101% of the target."""
+
+
     volume_lower = target_volume * 0.99
     volume_upper = target_volume * 1.01
-    
+
     max_iterations = 100
     consecutive_no_islands = 0
-    
+
     all_matrix_elements = set(matrix_element_labels) if isinstance(matrix_element_labels, list) else matrix_element_labels
     all_fiber_elements = set(fiber_element_labels) if isinstance(fiber_element_labels, list) else fiber_element_labels
-    
-    # ========== A ==========
-    #print("\n--- Phase A: Aggressive Island Elimination ---")
-    
+
+
+    # Island detection is a full traversal of the matrix.  The voids only change
+    # inside _fill_island, so while nothing was filled the previous result is
+    # still valid and is reused instead of being recomputed.
+    cached_islands = None
+    ownership = _void_ownership_index(all_voids, element_nodes_dict) if element_nodes_dict is not None else None
+    base_component_of = _matrix_base_components(all_matrix_elements, element_neighbors_dict)
+
     for iteration in range(80):
-        #print("\n  === Iteration {} / 30 (Aggressive) ===".format(iteration + 1))
-        
-        islands = _detect_islands(all_voids, element_neighbors_dict, 
-                                 all_matrix_elements, all_fiber_elements)
-        
+
+        if cached_islands is None:
+            islands = _detect_islands(all_voids, element_neighbors_dict,
+                                     all_matrix_elements, all_fiber_elements,
+                                     base_component_of)
+        else:
+            islands = cached_islands
+
         if not islands:
+            cached_islands = islands
             consecutive_no_islands += 1
-            #print("    No islands detected (consecutive: {})".format(consecutive_no_islands))
-            
+
             if consecutive_no_islands >= 5:
-                #print("\n    Phase A complete: No islands!")
                 break
         else:
             consecutive_no_islands = 0
-            # ==========  ==========
             total_island_elements = 0
             for isl in islands:
                 total_island_elements += len(isl)
-            
+
             island_sizes = []
             for isl in islands:
                 island_sizes.append(len(isl))
-            
-            #print("    Found {} island(s), total {} elements".format(
+
             #    len(islands), total_island_elements))
-            #print("    Sizes: {}".format(island_sizes))
-            
+
+            changed = False
             for idx, island in enumerate(islands):
                 # Skip fake islands: regions where all elements are already void
                 # (caused by fiber regions splitting the matrix into sub-domains)
                 real_island = [e for e in island if e not in used_elements]
                 if not real_island:
                     continue
-                _fill_island(island, all_voids, element_volume_dict, element_centroid_dict,
-                            used_elements, element_neighbors_dict, fiber_nodes, all_matrix_elements, element_nodes_dict)
-            
-            # ==========  ==========
+                if _fill_island(island, all_voids, element_volume_dict, element_centroid_dict,
+                                used_elements, element_neighbors_dict, fiber_nodes, all_matrix_elements,
+                                element_nodes_dict, ownership):
+                    changed = True
+
+            cached_islands = islands if not changed else None
+
             for void_info in all_voids:
                 if void_info['elements']:
                     volume_list = []
                     for e in void_info['elements']:
                         volume_list.append(element_volume_dict.get(e, 0.0))
                     void_info['volume'] = sum(volume_list)
-                    
+
                     centroid_list = []
                     for e in void_info['elements']:
                         centroid_list.append(element_centroid_dict[e])
                     void_info['centroid'] = np.mean(centroid_list, axis=0)
-    
+
+            if not changed:
+                # Nothing could be filled: every further pass over the same
+                # state would find the same islands and skip them again.
+                break
+
     # ========== Phase B: Final island check only — volume deferred to Phase 3 ==========
-    final_islands = _detect_islands(all_voids, element_neighbors_dict,
-                                   all_matrix_elements, all_fiber_elements)
+    if cached_islands is None:
+        final_islands = _detect_islands(all_voids, element_neighbors_dict,
+                                       all_matrix_elements, all_fiber_elements,
+                                       base_component_of)
+    else:
+        final_islands = cached_islands
 
     if final_islands:
         for idx, island in enumerate(final_islands):
@@ -3659,53 +3874,24 @@ def post_process_islands_and_volume(all_voids, element_neighbors_dict, element_v
             if not real_island:
                 continue
             _fill_island(island, all_voids, element_volume_dict, element_centroid_dict,
-                        used_elements, element_neighbors_dict, fiber_nodes, all_matrix_elements, element_nodes_dict)
+                        used_elements, element_neighbors_dict, fiber_nodes, all_matrix_elements,
+                        element_nodes_dict, ownership)
         for void_info in all_voids:
             if void_info['elements']:
                 void_info['volume'] = sum([element_volume_dict.get(e, 0.0) for e in void_info['elements']])
                 void_info['centroid'] = np.mean(
                     [element_centroid_dict[e] for e in void_info['elements']], axis=0)
-    else:
-        print("    SUCCESS: No islands detected")
-    
-    # ==========  ==========
-    #print("\n========== FINAL VERIFICATION ==========")
-    
-    final_islands = _detect_islands(all_voids, element_neighbors_dict,
-                                   all_matrix_elements, all_fiber_elements)
-    
+
     volume_list = []
     for v in all_voids:
         if v['elements']:
             volume_list.append(v['volume'])
     final_volume = sum(volume_list)
-    
+
     final_vf_pct = (final_volume / target_volume) * 100
-    
-    #print("  Final volume: {:.2f}% of target".format(final_vf_pct))
-    
-    if final_islands:
-        total_island_elem = 0
-        for isl in final_islands:
-            total_island_elem += len(isl)
-        
-        island_sizes = []
-        for isl in final_islands:
-            island_sizes.append(len(isl))
-        
-        #print("    CRITICAL: {} island(s) remain after 50 iterations!".format(len(final_islands)))
-        #print("    Island sizes: {}".format(island_sizes))
-        #print("    Total island elements: {}".format(total_island_elem))
-    else:
-        print("    SUCCESS: No islands detected")
-    
-    if final_volume >= volume_lower and final_volume <= volume_upper:
-        print("    SUCCESS: Volume within tolerance")
-    else:
-        print("    WARNING: Volume outside tolerance")
-    
-    print("=" * 70 + "\n")
-    
+
+    # No note here: this is an intermediate stage and the caller corrects the
+    # volume afterwards.
     return all_voids
 
 def post_process_volume_only(all_voids, element_neighbors_dict, element_volume_dict,
@@ -3720,381 +3906,448 @@ def post_process_volume_only(all_voids, element_neighbors_dict, element_volume_d
     volume_lower = target_volume * 0.99
     volume_upper = target_volume * 1.01
 
-    print("    Current volume: {:.2f}% of target (fine-tuning deferred to Phase 3)".format(
-        total_volume / target_volume * 100))
-
-    if total_volume >= volume_lower and total_volume <= volume_upper:
-        print("    Volume already within tolerance")
-    print("=" * 70 + "\n")
 
     return all_voids
 
-def _detect_islands(all_voids, element_neighbors_dict, all_matrix_elements, all_fiber_elements):
-    """
-    will_create_island
-    
-    voidfibermatrix
-    """
+def _matrix_base_components(all_matrix_elements, element_neighbors_dict):
+    """{element label: component index} for the matrix mesh with the voids
+    ignored.  Matrix regions that the fibre geometry alone separates, such as a
+    sliver between a fibre and the RVE boundary, are separate components; they
+    are not islands cut off by voids and must never be merged into a void."""
+    component_of = {}
+    next_id = 0
+    for start in all_matrix_elements:
+        if start in component_of:
+            continue
+        component_of[start] = next_id
+        stack = [start]
+        while stack:
+            current = stack.pop()
+            for nb in element_neighbors_dict.get(current, ()):
+                if nb in all_matrix_elements and nb not in component_of:
+                    component_of[nb] = next_id
+                    stack.append(nb)
+        next_id += 1
+    return component_of
+
+
+def _detect_islands(all_voids, element_neighbors_dict, all_matrix_elements, all_fiber_elements,
+                    base_component_of=None):
+    """Matrix regions that the voids have cut off from the rest of their
+    sub-domain.  Within every connected component of the void-free matrix mesh
+    the largest remaining non-void region is the main body; every other region
+    of that component is an island.  Returned largest first."""
     all_void_elements = set()
     for v in all_voids:
         all_void_elements.update(v['elements'])
-    
-    # void
+
     non_void_matrix = all_matrix_elements - all_void_elements
-    
+
     if len(non_void_matrix) == 0:
         return []
-    
-    # ========== will_create_islandBFS ==========
+
+    if base_component_of is None:
+        base_component_of = _matrix_base_components(all_matrix_elements, element_neighbors_dict)
+
     visited = set()
     regions = []
-    
+
     for start_elem in non_void_matrix:
         if start_elem in visited:
             continue
-        
+
         # BFS
         region = set()
         queue = deque([start_elem])
-        
+
         while queue:
             current = queue.popleft()
             if current in visited:
                 continue
-            
+
             visited.add(current)
             region.add(current)
-            
-            # 
+
             neighbors = element_neighbors_dict.get(current, set())
-            
+
             for neighbor in neighbors:
-                # voidmatrix
-                # fibervoid
-                if (neighbor in non_void_matrix and 
+                if (neighbor in non_void_matrix and
                     neighbor not in visited and
                     neighbor not in all_fiber_elements):  # fiber
                     queue.append(neighbor)
-        
+
         if region:
             regions.append(region)
-    
+
     if not regions:
         return []
-    
-    # ==========  ==========
+
     regions.sort(key=len, reverse=True)
-    
-    # RVE
-    main_region = regions[0]
-    
-    # 
-    # 
-    has_boundary_contact = False
-    for elem_id in list(main_region)[:100]:  # 
-        try:
-            elem = None
-            # part
-            # 
-            has_boundary_contact = True
-            break
-        except:
-            has_boundary_contact = True
-            break
-    
-    # 
-    islands = regions[1:] if len(regions) > 1 else []
-    
-    # ==========  ==========
-    verified_islands = []
-    for island in islands:
-        # voidfiber
-        is_truly_isolated = True
-        
-        for elem_id in island:
-            neighbors = element_neighbors_dict.get(elem_id, set())
-            
-            # 
-            if neighbors & main_region:
-                is_truly_isolated = False
-                break
-        
-        if is_truly_isolated and len(island) > 0:
-            verified_islands.append(island)
-    
-    return verified_islands
 
-def _fill_island(island, all_voids, element_volume_dict, element_centroid_dict, 
-                 used_elements, element_neighbors_dict, fiber_nodes, all_matrix_elements,
-                 element_nodes_dict=None):
-    """
-    void
-    """
-    if not island:
-        return
-    
-    #print("      Island size: {} elements".format(len(island)))
-    
-    # 
-    island_centroids = []
-    for elem_id in island:
-        if elem_id in element_centroid_dict:
-            island_centroids.append(element_centroid_dict[elem_id])
-    
-    if not island_centroids:
-        #print("        WARNING: Cannot compute island centroid")
-        return
-    
-    island_centroid = np.mean(island_centroids, axis=0)
-    
-    # void
-    min_dist = float('inf')
-    closest_idx = 0
-    
+    # the largest region of each sub-domain is its main body
+    main_seen = set()
+    islands = []
+    for region in regions:
+        component = base_component_of.get(next(iter(region)))
+        if component in main_seen:
+            islands.append(region)
+        else:
+            main_seen.add(component)
+
+    return islands
+
+def _void_ownership_index(all_voids, element_nodes_dict):
+    """Which void owns each element, how many voids touch each node, and the
+    node set of every void (by index in all_voids).  Kept in step by
+    _fill_island so the other-void tests need no per-island rebuild."""
+    elem_owner = {}
+    node_counts = {}
+    nodes_of = []
     for idx, void_info in enumerate(all_voids):
-        if not void_info['elements']:
-            continue
-        
-        dist = np.linalg.norm(island_centroid - void_info['centroid'])
-        if dist < min_dist:
-            min_dist = dist
-            closest_idx = idx
-    
-    if not all_voids[closest_idx]['elements']:
-        #print("        WARNING: Closest void is empty")
-        return
-    
-    # 
-    filled_count = 0
-    skipped_count = 0
-    
-    # Build set of all current void elements and nodes for isolation check
-    all_void_elements_now = set()
-    all_void_nodes_now = set()
-    for idx, vi in enumerate(all_voids):
-        if idx != closest_idx:
-            all_void_elements_now.update(vi['elements'])
-            for oe in vi['elements']:
-                all_void_nodes_now.update(element_nodes_dict.get(oe, set()))
+        nodes = set()
+        for element_label in void_info['elements']:
+            elem_owner[element_label] = idx
+            nodes.update(element_nodes_dict.get(element_label, ()))
+        nodes_of.append(nodes)
+        for node_label in nodes:
+            node_counts[node_label] = node_counts.get(node_label, 0) + 1
+    return {'elem_owner': elem_owner, 'node_counts': node_counts, 'nodes_of': nodes_of}
 
+
+def _fill_island(island, all_voids, element_volume_dict, element_centroid_dict,
+                 used_elements, element_neighbors_dict, fiber_nodes, all_matrix_elements,
+                 element_nodes_dict=None, ownership=None):
+    """Merge an isolated matrix island into the void that cut it off.
+
+    The receiving void is the one sharing the most element faces with the
+    island (nearest centroid as tie-break), and the island is filled outward
+    from those shared faces, so the void remains a single face-connected set.
+    Island elements that would make the void touch another void are left as
+    matrix.  Returns True when at least one element was merged."""
+    if not island:
+        return False
+    if element_nodes_dict is None:
+        return False
+    if ownership is None:
+        ownership = _void_ownership_index(all_voids, element_nodes_dict)
+    elem_owner = ownership['elem_owner']
+    node_counts = ownership['node_counts']
+    while len(ownership['nodes_of']) < len(all_voids):
+        ownership['nodes_of'].append(set())
+
+    # ---- which voids touch the island, and through how many faces ----------
+    contact = {}
     for elem_id in island:
+        for nb in element_neighbors_dict.get(elem_id, set()):
+            owner = elem_owner.get(nb)
+            if owner is not None and all_voids[owner]['elements']:
+                contact[owner] = contact.get(owner, 0) + 1
+    if not contact:
+        return False
+
+    island_centroids = [element_centroid_dict[e] for e in island if e in element_centroid_dict]
+    if not island_centroids:
+        return False
+    island_centroid = np.mean(island_centroids, axis=0)
+
+    def _rank(idx):
+        dist = float(np.linalg.norm(island_centroid - all_voids[idx]['centroid']))
+        return (-contact[idx], dist, idx)
+
+    closest_idx = min(contact.keys(), key=_rank)
+    own_nodes = ownership['nodes_of'][closest_idx]
+    receiver = all_voids[closest_idx]
+
+    # ---- fill outward from the faces shared with the receiving void ---------
+    filled_count = 0
+    queue = deque()
+    queued = set()
+    for elem_id in island:
+        for nb in element_neighbors_dict.get(elem_id, set()):
+            if elem_owner.get(nb) == closest_idx:
+                queue.append(elem_id)
+                queued.add(elem_id)
+                break
+
+    while queue:
+        elem_id = queue.popleft()
         if elem_id in used_elements:
-            skipped_count += 1
             continue
 
-        # Skip if this element is face-adjacent to any OTHER void
-        elem_neighbors = element_neighbors_dict.get(elem_id, set())
-        if elem_neighbors & all_void_elements_now:
-            skipped_count += 1
+        # never let the receiving void touch another void: no shared face ...
+        touches = False
+        for nb in element_neighbors_dict.get(elem_id, set()):
+            owner = elem_owner.get(nb)
+            if owner is not None and owner != closest_idx:
+                touches = True
+                break
+        if touches:
             continue
-
-        # Skip if this element shares any node with any OTHER void
+        # ... and no shared node
         elem_nodes = element_nodes_dict.get(elem_id, set())
-        if elem_nodes & all_void_nodes_now:
-            skipped_count += 1
+        if _touches_other_void(elem_nodes, node_counts, own_nodes):
             continue
 
-        all_voids[closest_idx]['elements'].append(elem_id)
+        receiver['elements'].append(elem_id)
         used_elements.add(elem_id)
-        # Keep all_void_elements_now updated so subsequent elements in same island
-        # are also checked correctly
-        all_void_elements_now.add(elem_id)
+        elem_owner[elem_id] = closest_idx
+        for node_label in elem_nodes:
+            if node_label not in own_nodes:
+                own_nodes.add(node_label)
+                node_counts[node_label] = node_counts.get(node_label, 0) + 1
         filled_count += 1
-    
+
+        for nb in element_neighbors_dict.get(elem_id, set()):
+            if nb in island and nb not in queued:
+                queue.append(nb)
+                queued.add(nb)
+
     if filled_count > 0:
-        # ==========  ==========
-        volume_list = []
-        for e in all_voids[closest_idx]['elements']:
-            volume_list.append(element_volume_dict.get(e, 0.0))
-        all_voids[closest_idx]['volume'] = sum(volume_list)
-        
-        if all_voids[closest_idx]['elements']:
-            centroid_list = []
-            for e in all_voids[closest_idx]['elements']:
-                centroid_list.append(element_centroid_dict[e])
-            all_voids[closest_idx]['centroid'] = np.mean(centroid_list, axis=0)
-        
-        #print("          Filled {} elements into void {}".format(filled_count, closest_idx))
-    
-    if skipped_count > 0:
-        print("        - Skipped {} already-used elements".format(skipped_count))
+        receiver['volume'] = sum([element_volume_dict.get(e, 0.0) for e in receiver['elements']])
+        receiver['centroid'] = np.mean([element_centroid_dict[e] for e in receiver['elements']], axis=0)
+    return filled_count > 0
 
-def _remove_edge_element(all_voids, element_neighbors_dict, element_volume_dict, all_matrix_elements):
-    """"""
-    all_voids.sort(key=lambda v: v['volume'], reverse=True)
-    
-    for void_info in all_voids:
-        if len(void_info['elements']) <= 1:
-            continue
-        
-        void_elements = set(void_info['elements'])
-        
-        # 
-        edge_elements = []
-        for elem_id in void_elements:
-            neighbors = element_neighbors_dict.get(elem_id, set())
-            if neighbors - void_elements:
-                edge_elements.append(elem_id)
-        
-        if not edge_elements:
-            continue
-        
-        edge_elements.sort(key=lambda e: element_volume_dict.get(e, 0.0), reverse=True)
-        
-        for candidate in edge_elements:
-            remaining = void_elements - {candidate}
-            
-            # 
-            if not _is_connected(remaining, element_neighbors_dict):
-                continue
-            
-            # 
-            if _would_create_island(candidate, void_elements, element_neighbors_dict, all_matrix_elements):
-                continue
-            
-            # 
-            void_info['elements'].remove(candidate)
-            void_info['volume'] -= element_volume_dict.get(candidate, 0.0)
-            return True
-    
-    return False
-
-def _add_edge_element(all_voids, element_neighbors_dict, element_volume_dict,
-                     element_centroid_dict, all_matrix_elements, used_elements,
-                     element_nodes_dict=None):
-    """"""
-    all_voids.sort(key=lambda v: v['volume'])
-    
-    all_void_elements = set()
-    for v in all_voids:
-        all_void_elements.update(v['elements'])
-    
-    for void_info in all_voids:
-        void_elements = set(void_info['elements'])
-        
-        # 
-        boundary = set()
-        for elem_id in void_elements:
-            neighbors = element_neighbors_dict.get(elem_id, set())
-            for neighbor in neighbors:
-                if neighbor in all_matrix_elements and neighbor not in all_void_elements and neighbor not in used_elements:
-                    boundary.add(neighbor)
-        
-        if not boundary:
-            continue
-        
-        candidates = list(boundary)
-        random.shuffle(candidates)
-        
-        # Build other-void node set for strict isolation
-        other_void_nodes = set()
-        if element_nodes_dict is not None:
-            for ov in all_voids:
-                if set(ov['elements']) != void_elements:
-                    for oe in ov['elements']:
-                        other_void_nodes.update(element_nodes_dict.get(oe, set()))
-
-        for candidate in candidates:
-            # Check candidate is not face-adjacent to any OTHER void
-            candidate_neighbors = element_neighbors_dict.get(candidate, set())
-            touches_other_void = False
-            for nb in candidate_neighbors:
-                if nb in all_void_elements and nb not in void_elements:
-                    touches_other_void = True
-                    break
-            if touches_other_void:
-                continue
-            
-            # Check candidate shares no node with any OTHER void
-            if element_nodes_dict is not None:
-                candidate_nodes = element_nodes_dict.get(candidate, set())
-                if candidate_nodes & other_void_nodes:
-                    continue
-
-            void_info['elements'].append(candidate)
-            void_info['volume'] += element_volume_dict.get(candidate, 0.0)
-            used_elements.add(candidate)
-            all_void_elements.add(candidate)
-
-            centroid_list = []
-            for e in void_info['elements']:
-                centroid_list.append(element_centroid_dict[e])
-            void_info['centroid'] = np.mean(centroid_list, axis=0)
-
-            return True
-    
-    return False
 
 def _is_connected(element_set, element_neighbors_dict):
-    """"""
+    """Return True when element_set forms one face-connected cluster."""
     if not element_set:
         return True
-    
+
     visited = set()
     queue = deque([next(iter(element_set))])
-    
+
     while queue:
         current = queue.popleft()
         if current in visited:
             continue
         visited.add(current)
-        
+
         neighbors = element_neighbors_dict.get(current, set())
         for neighbor in neighbors:
             if neighbor in element_set and neighbor not in visited:
                 queue.append(neighbor)
-    
+
     return len(visited) == len(element_set)
 
 
-def _would_create_island(elem_to_remove, current_void, element_neighbors_dict, all_matrix_elements):
-    """"""
-    neighbors = element_neighbors_dict.get(elem_to_remove, set())
-    matrix_neighbors = [n for n in neighbors if n in all_matrix_elements]
-    
-    if len(matrix_neighbors) <= 1:
-        return False
-    
-    void_after = current_void - {elem_to_remove}
-    
-    start = matrix_neighbors[0]
-    visited = set()
-    queue = deque([start])
-    
-    while queue:
-        current = queue.popleft()
-        if current in visited:
-            continue
-        visited.add(current)
-        
-        neighbors = element_neighbors_dict.get(current, set())
-        for neighbor in neighbors:
-            if neighbor in all_matrix_elements and neighbor not in void_after and neighbor not in visited:
-                queue.append(neighbor)
-    
-    for matrix_neighbor in matrix_neighbors:
-        if matrix_neighbor not in visited:
+def void_removable_elements(void_info, all_voids, element_neighbors_dict,
+                            all_void_elements=None):
+    """Elements of one void that may be released without breaking the rules the
+    growth phase enforces: the void stays face-connected and never ends up
+    touching another void.  ``all_void_elements`` (the union of every void's
+    elements) may be passed in when the caller already has it."""
+    void_set = set(void_info['elements'])
+    if all_void_elements is None:
+        other_void_elems = set()
+        for other in all_voids:
+            if other is not void_info:
+                other_void_elems.update(other['elements'])
+    else:
+        other_void_elems = all_void_elements - void_set
+
+    keeps_connected = _connectivity_removable(void_set, element_neighbors_dict)
+
+    removable = []
+    for element_label in void_info['elements']:
+        neighbors = element_neighbors_dict.get(element_label, set())
+        if not (neighbors - void_set):
+            continue                      # interior element, not on the boundary
+        if neighbors & other_void_elems:
+            continue                      # releasing it would expose another void
+        if element_label in keeps_connected:
+            removable.append(element_label)
+    return removable
+
+
+def void_addable_elements(void_info, all_voids, element_neighbors_dict, element_nodes_dict,
+                          used_elements, available_near_fiber, available_inter_matrix,
+                          fiber_element_labels, matrix_element_labels, node_index=None,
+                          exclude_near_fiber=False):
+    """Free matrix elements that may join one void: not used by another void,
+    sharing no node with another void, and not isolating a fiber element.
+    ``node_index`` is the result of _void_node_index(all_voids, ...) when the
+    caller evaluates several voids against the same state.  With
+    ``exclude_near_fiber`` the fiber-adjacent pool is not offered (used for
+    inter-matrix voids, which must stay clear of the fibers)."""
+    if node_index is None:
+        node_index = _void_node_index(all_voids, element_nodes_dict)
+    counts, nodes_of = node_index
+    own_nodes = nodes_of[id(void_info)]
+    void_element_set = set(void_info['elements'])
+    matrix_set = _label_set(matrix_element_labels)
+
+    candidates = set()
+    for element_label in void_info['elements']:
+        for neighbor in element_neighbors_dict.get(element_label, set()):
+            if neighbor in used_elements:
+                continue
+            if neighbor not in available_near_fiber and neighbor not in available_inter_matrix:
+                continue
+            if exclude_near_fiber and neighbor in available_near_fiber:
+                continue
+            if _touches_other_void(element_nodes_dict.get(neighbor, set()), counts, own_nodes):
+                continue
+            if will_isolate_fiber(neighbor, void_element_set, element_neighbors_dict,
+                                  fiber_element_labels, matrix_set):
+                continue
+            candidates.add(neighbor)
+    return candidates
+
+
+def force_void_volume_into_tolerance(all_voids, target_volume, element_volume_dict,
+                                     element_centroid_dict, element_neighbors_dict,
+                                     element_nodes_dict, used_elements,
+                                     available_near_fiber, available_inter_matrix,
+                                     near_fiber_candidates, inter_matrix_candidates,
+                                     fiber_element_labels, matrix_element_labels,
+                                     max_steps=5000, target_near_ratio=None):
+    """Final correction of the total void volume.
+
+    The void count and the distribution ratio have had their chance by the time
+    this runs, so this pass looks only at the total volume and may use any void.
+    Every step must bring the total closer to the target, which makes the pass
+    monotone and free of the add/remove oscillation a plain tolerance test can
+    fall into.  Returns True when the volume ends up within 99%-101%.
+    """
+    volume_lower = target_volume * 0.99
+    volume_upper = target_volume * 1.01
+    matrix_label_set = _label_set(matrix_element_labels)
+    fiber_element_labels = _label_set(fiber_element_labels)
+
+    def current_total():
+        return sum([v['volume'] for v in all_voids if v['elements']])
+
+    # One step moves a single element, so the candidate lists of the voids it
+    # does not touch stay valid.  A void is affected only when the moved
+    # element shares a node with the void itself or with the free elements
+    # around it (its frontier); everything else is served from the cache.
+    all_void_elements = set()
+    for x in all_voids:
+        all_void_elements.update(x['elements'])
+    node_counts, nodes_of_void = _void_node_index(all_voids, element_nodes_dict)
+    node_index = (node_counts, nodes_of_void)
+
+    removable_cache = {}
+    addable_cache = {}
+    reach_cache = {}
+
+    def _reach_nodes(v):
+        key = id(v)
+        nodes = reach_cache.get(key)
+        if nodes is None:
+            nodes = set()
+            for el in v['elements']:
+                nodes.update(element_nodes_dict.get(el, ()))
+                for nb in element_neighbors_dict.get(el, ()):
+                    nodes.update(element_nodes_dict.get(nb, ()))
+            reach_cache[key] = nodes
+        return nodes
+
+    def _invalidate(changed_void, moved_element):
+        moved_nodes = element_nodes_dict.get(moved_element, set())
+        for v in all_voids:
+            key = id(v)
+            if v is changed_void:
+                removable_cache.pop(key, None)
+                addable_cache.pop(key, None)
+                reach_cache.pop(key, None)
+            elif moved_nodes & _reach_nodes(v):
+                removable_cache.pop(key, None)
+                addable_cache.pop(key, None)
+
+    for _ in range(max_steps):
+        total = current_total()
+        if volume_lower <= total <= volume_upper:
             return True
-    
-    return False
+        deviation = abs(total - target_volume)
+        best = None                      # (new deviation, void, element, removing?)
+
+        if total > target_volume:
+            for v in [x for x in all_voids if len(x['elements']) > 1]:
+                key = id(v)
+                removable = removable_cache.get(key)
+                if removable is None:
+                    removable = void_removable_elements(v, all_voids, element_neighbors_dict,
+                                                        all_void_elements)
+                    removable_cache[key] = removable
+                for element_label in removable:
+                    new_dev = abs(total - element_volume_dict.get(element_label, 0.0) - target_volume)
+                    if new_dev < deviation and (best is None or new_dev < best[0]):
+                        best = (new_dev, v, element_label, True)
+        else:
+            for v in [x for x in all_voids if x['elements']]:
+                key = id(v)
+                addable = addable_cache.get(key)
+                if addable is None:
+                    addable = void_addable_elements(
+                        v, all_voids, element_neighbors_dict, element_nodes_dict,
+                        used_elements, available_near_fiber, available_inter_matrix,
+                        fiber_element_labels, matrix_label_set, node_index,
+                        exclude_near_fiber=(v['type'] == 'inter_matrix'
+                                            and target_near_ratio is not None
+                                            and target_near_ratio < 1.0))
+                    addable_cache[key] = addable
+                for element_label in addable:
+                    new_dev = abs(total + element_volume_dict.get(element_label, 0.0) - target_volume)
+                    if new_dev < deviation and (best is None or new_dev < best[0]):
+                        best = (new_dev, v, element_label, False)
+
+        if best is None:
+            return False                 # nothing left that would improve the total
+
+        _, void_info, element_label, removing = best
+        if removing:
+            void_info['elements'].remove(element_label)
+            used_elements.discard(element_label)
+            if element_label in near_fiber_candidates:
+                available_near_fiber.add(element_label)
+            elif element_label in inter_matrix_candidates:
+                available_inter_matrix.add(element_label)
+            void_info['volume'] -= element_volume_dict.get(element_label, 0.0)
+            all_void_elements.discard(element_label)
+        else:
+            void_info['elements'].append(element_label)
+            used_elements.add(element_label)
+            available_near_fiber.discard(element_label)
+            available_inter_matrix.discard(element_label)
+            void_info['volume'] += element_volume_dict.get(element_label, 0.0)
+            all_void_elements.add(element_label)
+        if void_info['elements']:
+            void_info['centroid'] = np.mean(
+                [element_centroid_dict[e] for e in void_info['elements']], axis=0)
+
+        # keep the node ownership index in step with the change
+        own_nodes = set()
+        for el in void_info['elements']:
+            own_nodes.update(element_nodes_dict.get(el, ()))
+        previous = nodes_of_void.get(id(void_info), set())
+        for node_label in previous - own_nodes:
+            node_counts[node_label] -= 1
+        for node_label in own_nodes - previous:
+            node_counts[node_label] = node_counts.get(node_label, 0) + 1
+        nodes_of_void[id(void_info)] = own_nodes
+        _invalidate(void_info, element_label)
+
+    return volume_lower <= current_total() <= volume_upper
+
 
 ######################
-def generate_voids_random_w_random_theta(target_vf, all_matrix_elements, 
+def generate_voids_random_w_random_theta(target_vf, all_matrix_elements,
                                          all_fiber_elements, elem_neighbors,
                                          elem_volumes, total_volume,
                                          matrix_elem_nodes, fiber_elem_nodes):
     """
     1wtheta - +
-    
-    
-    1. 
+
+
+    1.
     2. clusters
-    3. 
-    
-    
-    - 
-    
-    
+    3.
+
+
+    -
+
+
         target_vf: float, RVE
         all_matrix_elements: set of matrix element IDs
         all_fiber_elements: set of fiber element IDs
@@ -4103,199 +4356,128 @@ def generate_voids_random_w_random_theta(target_vf, all_matrix_elements,
         total_volume: float, RVE
         matrix_elem_nodes: dict {elem_id: set of node labels}
         fiber_elem_nodes: dict {elem_id: set of node labels}
-    
-    
+
+
         void_elements: set of void element IDs
         statistics: dict with detailed info
     """
-    print("\n" + "="*70)
-    print("CASE 1: Random w, Random theta (Pure Random Selection)")
-    print("="*70)
-    
+
     # Build near-fiber lookup ONCE to avoid O(N_fiber) per-element classification later.
     # Rule: an element is "near-fiber" iff it shares >=1 node with any fiber element.
     all_fiber_nodes = set()
     for fib_nodes in fiber_elem_nodes.values():
         all_fiber_nodes |= fib_nodes
-    
+
     is_elem_near_fiber = {e: bool(matrix_elem_nodes.get(e, set()) & all_fiber_nodes)
                           for e in all_matrix_elements}
-    
-    # void
+
     target_void_volume = (target_vf / 100.0) * total_volume
-    print("Target void volume: {:.6e}".format(target_void_volume))
-    print("Target Vf:          {:.4f}%".format(target_vf))
-    
-    # 
+
     void_set = set()
     current_volume = 0.0
     available_elements = list(all_matrix_elements.copy())
     random.shuffle(available_elements)
-    
-    print("\nRandomly selecting void elements...")
+
     for elem_id in available_elements:
         if current_volume >= target_void_volume:
             break
-        
+
         void_set.add(elem_id)
         current_volume += elem_volumes.get(elem_id, 0.0)
-    
-    print("Selected {} void elements".format(len(void_set)))
-    
-    # 
+
+
     final_volume = sum([elem_volumes.get(e, 0.0) for e in void_set])
     final_vf = (final_volume / total_volume) * 100
-    
-    print("\nChecking final volume fraction...")
-    print("  Current Vf: {:.4f}%".format(final_vf))
-    print("  Target Vf:  {:.4f}%".format(target_vf))
-    
-    # 99%-101%
-    print("\nAdjusting volume to meet strict tolerance (99%-101%)...")
-    
+
+
     final_volume = sum([elem_volumes.get(e, 0.0) for e in void_set])
     final_vf = (final_volume / total_volume) * 100
     target_lower = target_vf * 0.99
     target_upper = target_vf * 1.01
-    
-    print("  Current Vf: {:.4f}%".format(final_vf))
-    print("  Target range: {:.4f}% - {:.4f}%".format(target_lower, target_upper))
-    
-    # 
+
+
     if final_vf < target_lower:
-        print("  Volume too low, adding elements...")
         remaining_elements = [e for e in available_elements if e not in void_set]
-        
+
         for elem_id in remaining_elements:
             if elem_id in void_set:
                 continue
-            
-            # 
+
             predicted_volume = final_volume + elem_volumes.get(elem_id, 0.0)
             predicted_vf = (predicted_volume / total_volume) * 100
-            
-            # 
+
             if predicted_vf > target_upper:
                 continue
-            
-            # 
+
             void_set.add(elem_id)
             final_volume = predicted_volume
             final_vf = predicted_vf
-            
-            # 
+
             if final_vf >= target_lower:
-                print("  Volume adjusted: {:.4f}%".format(final_vf))
                 break
-    
-    # 
+
     elif final_vf > target_upper:
-        print("  Volume too high, removing elements...")
         void_list = list(void_set)
-        
-        # 
+
         void_list_sorted = [(e, elem_volumes.get(e, 0.0)) for e in void_list]
         void_list_sorted.sort(key=lambda x: x[1], reverse=True)
-        
+
         for elem_id, elem_vol in void_list_sorted:
-            # 
             predicted_volume = final_volume - elem_vol
             predicted_vf = (predicted_volume / total_volume) * 100
-            
-            # 
+
             if predicted_vf < target_lower:
                 continue
-            
-            # 
+
             void_set.discard(elem_id)
             final_volume = predicted_volume
             final_vf = predicted_vf
-            
-            # 
+
             if final_vf <= target_upper:
-                print("  Volume adjusted: {:.4f}%".format(final_vf))
                 break
-    
-    # 
+
     final_volume = sum([elem_volumes.get(e, 0.0) for e in void_set])
     final_vf = (final_volume / total_volume) * 100
-    
+
     if final_vf < target_lower or final_vf > target_upper:
-        print("\n" + "!"*70)
-        print("ERROR: Cannot achieve target volume within 99%-101% tolerance!")
-        print("  Current Vf: {:.4f}%".format(final_vf))
-        print("  Target range: {:.4f}% - {:.4f}%".format(target_lower, target_upper))
-        print("  This may be due to element size constraints.")
-        print("!"*70)
-    
-    # 
-    print("\n" + "-"*70)
-    print("FINAL STATISTICS")
-    print("-"*70)
-    
-    # 
+        void_note_problem('Vvoid outside the 99%-101% tolerance', 'vvoid')
+
     final_volume = sum([elem_volumes.get(e, 0.0) for e in void_set])
     final_vf = (final_volume / total_volume) * 100
-    
-    # clusters
+
     final_clusters = cluster_adjacent_void_elements(void_set, elem_neighbors)
-    
-    # wtypecluster
+
     near_fiber_volume = 0.0
     inter_matrix_volume = 0.0
     near_fiber_count = 0
     inter_matrix_count = 0
     clusters_with_type = []
-    
+
     for cluster in final_clusters:
         # an element is 'near-fiber' if it shares >= 1 node with any fiber element.
         is_near_fiber = _cluster_has_near_fiber(cluster, is_elem_near_fiber)
-        
+
         cluster_volume = sum([elem_volumes.get(e, 0.0) for e in cluster])
-        
+
         if is_near_fiber:
             near_fiber_volume += cluster_volume
             near_fiber_count += 1
         else:
             inter_matrix_volume += cluster_volume
             inter_matrix_count += 1
-        
-        # typecluster
+
         clusters_with_type.append({
             'cluster': cluster,
             'type': 'near_fiber' if is_near_fiber else 'inter_matrix',
             'volume': cluster_volume
         })
-    
+
     total_void_volume = near_fiber_volume + inter_matrix_volume
     w_value = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-    
-    # 
-    print("Total voids (clusters): {}".format(len(final_clusters)))
-    if len(final_clusters) > 0:
-        print("  Near-fiber voids:     {} ({:.1f}%)".format(
-            near_fiber_count, near_fiber_count*100.0/len(final_clusters)))
-        print("  Inter-matrix voids:   {} ({:.1f}%)".format(
-            inter_matrix_count, inter_matrix_count*100.0/len(final_clusters)))
-    
-    print("\nTotal void volume:      {:.6e}".format(total_void_volume))
-    print("  Near-fiber volume:    {:.6e}".format(near_fiber_volume))
-    print("  Inter-matrix volume:  {:.6e}".format(inter_matrix_volume))
-    
-    print("\nRealized Vf:            {:.4f}%".format(final_vf))
-    print("Target Vf:              {:.4f}%".format(target_vf))
-    print("Deviation:              {:.4f}%".format(abs(final_vf - target_vf)))
-    
+
     if abs(final_vf - target_vf) > 1.0:
-        print("\n" + "!"*70)
-        print("WARNING: Volume fraction deviation > 1%!")
-        print("This may indicate insufficient matrix elements.")
-        print("!"*70)
-    
-    print("\nRealized w value:       {:.4f}".format(w_value))
-    print("="*70 + "\n")
-    
-    # 
+        void_note_problem('Vvoid deviates from the target by more than 1%', 'vvoid')
+
     statistics = {
         'num_voids': len(final_clusters),
         'num_valid_voids': len(final_clusters),
@@ -4312,7 +4494,7 @@ def generate_voids_random_w_random_theta(target_vf, all_matrix_elements,
         'clusters': final_clusters,
         'clusters_with_type': clusters_with_type
     }
-    
+
     return void_set, statistics
 
 def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_elements,
@@ -4321,19 +4503,19 @@ def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_element
                                          matrix_elem_nodes, fiber_elem_nodes):
     """
     2wtheta - w
-    
-    
+
+
     1. near_fiber / inter_matrix
-    2. 
+    2.
     3. cluster>=2
     4. w
     5. w
     6. w
-    
-    
+
+
     -  AND w
-    
-    
+
+
         target_vf: float, RVE
         target_w: float, w [0,1]
         all_matrix_elements: set of matrix element IDs
@@ -4343,28 +4525,20 @@ def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_element
         total_volume: float, RVE
         matrix_elem_nodes: dict {elem_id: set of node labels}
         fiber_elem_nodes: dict {elem_id: set of node labels}
-    
-    
+
+
         void_elements: set of void element IDs
         statistics: dict
     """
-    print("\n" + "="*70)
-    print("CASE 2: Custom w, Random theta (w-Controlled Random Selection)")
-    print("="*70)
-    print("Target w = {:.4f}".format(target_w))
-    print("Target Vf = {:.4f}%".format(target_vf))
-    
-    # void
+
     target_void_volume = (target_vf / 100.0) * total_volume
-    print("Target void volume: {:.6e}".format(target_void_volume))
-    
-    # 
+
     # Pre-compute the union of all fiber node labels ONCE.
     # Classification aligned with Step 4 convention (>=1 shared node).
     all_fiber_nodes = set()
     for fib_nodes in fiber_elem_nodes.values():
         all_fiber_nodes |= fib_nodes
-    
+
     near_fiber_candidates = set()
     inter_matrix_candidates = set()
     for elem_id in all_matrix_elements:
@@ -4372,112 +4546,95 @@ def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_element
             near_fiber_candidates.add(elem_id)
         else:
             inter_matrix_candidates.add(elem_id)
-    
+
     is_elem_near_fiber = {e: (e in near_fiber_candidates) for e in all_matrix_elements}
-    
-    print("Near-fiber candidates:   {} elements".format(len(near_fiber_candidates)))
-    print("Inter-matrix candidates: {} elements".format(len(inter_matrix_candidates)))
-    
-    # 
+
+
     near_fiber_list = list(near_fiber_candidates)
     inter_matrix_list = list(inter_matrix_candidates)
     random.shuffle(near_fiber_list)
     random.shuffle(inter_matrix_list)
-    
-    # 
+
     void_set = set()
     near_fiber_idx = 0
     inter_matrix_idx = 0
-    
-    print("\nSelecting elements with real-time w-value control...")
-    
-    # 
+
+
     max_iterations = len(all_matrix_elements)
     iteration = 0
     w_adjustment_phase = False
-    
+
     while iteration < max_iterations:
         iteration += 1
-        
-        # 
+
         current_clusters = cluster_adjacent_void_elements(void_set, elem_neighbors)
-        
+
         current_near_fiber_volume = 0.0
         current_inter_matrix_volume = 0.0
         near_fiber_clusters = []
         inter_matrix_clusters = []
-        
+
         for cluster in current_clusters:
             is_near_fiber = _cluster_has_near_fiber(cluster, is_elem_near_fiber)
-            
+
             cluster_volume = sum([elem_volumes.get(e, 0.0) for e in cluster])
-            
+
             if is_near_fiber:
                 current_near_fiber_volume += cluster_volume
                 near_fiber_clusters.append(cluster)
             else:
                 current_inter_matrix_volume += cluster_volume
                 inter_matrix_clusters.append(cluster)
-        
+
         current_total_volume = current_near_fiber_volume + current_inter_matrix_volume
         current_vf = (current_total_volume / total_volume) * 100.0
         current_w = current_near_fiber_volume / current_total_volume if current_total_volume > 0 else 0.0
-        
-        # 
+
         volume_ok = current_vf >= target_vf * 0.99
         w_ok = abs(current_w - target_w) <= 0.01
-        
+
         if volume_ok and w_ok:
-            print("\nTarget reached!")
-            print("  Final Vf: {:.4f}% (target: {:.4f}%)".format(current_vf, target_vf))
-            print("  Final w:  {:.4f} (target: {:.4f})".format(current_w, target_w))
             break
-        
-        # w
+
         if volume_ok and not w_ok:
             if not w_adjustment_phase:
-                print("\nVolume reached, adjusting w value...")
                 w_adjustment_phase = True
-            
-            # w
+
             if current_w < target_w:
                 inter_matrix_elems_in_voids = set()
                 for cluster in inter_matrix_clusters:
                     inter_matrix_elems_in_voids.update(cluster)
-                
+
                 if len(inter_matrix_elems_in_voids) > 0 and near_fiber_idx < len(near_fiber_list):
                     elem_volumes_list = [(e, elem_volumes.get(e, 0.0)) for e in inter_matrix_elems_in_voids]
                     elem_volumes_list.sort(key=lambda x: x[1])
                     to_remove = elem_volumes_list[0][0]
                     to_add = near_fiber_list[near_fiber_idx]
-                    
+
                     void_set.discard(to_remove)
                     void_set.add(to_add)
                     near_fiber_idx += 1
                 else:
-                    print("\nCannot adjust w further (no elements available).")
                     break
-            
+
             elif current_w > target_w:
                 near_fiber_elems_in_voids = set()
                 for cluster in near_fiber_clusters:
                     near_fiber_elems_in_voids.update(cluster)
-                
+
                 if len(near_fiber_elems_in_voids) > 0 and inter_matrix_idx < len(inter_matrix_list):
                     elem_volumes_list = [(e, elem_volumes.get(e, 0.0)) for e in near_fiber_elems_in_voids]
                     elem_volumes_list.sort(key=lambda x: x[1])
                     to_remove = elem_volumes_list[0][0]
                     to_add = inter_matrix_list[inter_matrix_idx]
-                    
+
                     void_set.discard(to_remove)
                     void_set.add(to_add)
                     inter_matrix_idx += 1
                 else:
-                    print("\nCannot adjust w further (no elements available).")
                     break
-        
+
         else:
-            # 
             if current_w < target_w:
                 if near_fiber_idx < len(near_fiber_list):
                     void_set.add(near_fiber_list[near_fiber_idx])
@@ -4486,7 +4643,6 @@ def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_element
                     void_set.add(inter_matrix_list[inter_matrix_idx])
                     inter_matrix_idx += 1
                 else:
-                    print("\nNo more elements available.")
                     break
             else:
                 if inter_matrix_idx < len(inter_matrix_list):
@@ -4496,252 +4652,179 @@ def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_element
                     void_set.add(near_fiber_list[near_fiber_idx])
                     near_fiber_idx += 1
                 else:
-                    print("\nNo more elements available.")
                     break
-        
-        if iteration % 100 == 0:
-            print("  Iteration {}: Vf={:.4f}%, w={:.4f}".format(
-                iteration, current_vf, current_w))
-    
-    # w
-    print("\nFinal volume check and replenishment...")
-    
-    # cluster
+
+
     final_clusters = cluster_adjacent_void_elements(void_set, elem_neighbors)
-    
+
     near_fiber_volume = 0.0
     inter_matrix_volume = 0.0
-    
+
     for cluster in final_clusters:
         is_near_fiber = _cluster_has_near_fiber(cluster, is_elem_near_fiber)
         cluster_volume = _cluster_volume(cluster, elem_volumes)
-        
+
         if is_near_fiber:
             near_fiber_volume += cluster_volume
         else:
             inter_matrix_volume += cluster_volume
-    
+
     total_void_volume = near_fiber_volume + inter_matrix_volume
     final_vf = (total_void_volume / total_volume) * 100.0
     final_w = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-    
-    print("  Before replenishment: Vf={:.4f}%, w={:.4f}".format(final_vf, final_w))
-    
-    # 99%-101%w
-    print("\nAdjusting volume to meet strict tolerance (99%-101%)...")
-    
+
+
     target_lower = target_vf * 0.99
     target_upper = target_vf * 1.01
     target_void_volume_lower = (target_lower / 100.0) * total_volume
     target_void_volume_upper = (target_upper / 100.0) * total_volume
-    
-    print("  Before adjustment: Vf={:.4f}%, w={:.4f}".format(final_vf, final_w))
-    print("  Target range: {:.4f}% - {:.4f}%".format(target_lower, target_upper))
-    
-    # w
+
+
     if final_vf < target_lower:
-        print("  Volume too low, adding elements while maintaining w...")
-        
+
         remaining_near = [e for e in near_fiber_list[near_fiber_idx:] if e not in void_set]
         remaining_inter = [e for e in inter_matrix_list[inter_matrix_idx:] if e not in void_set]
-        
-        # near_fiberinter_matrixw
+
         near_idx = 0
         inter_idx = 0
-        
+
         while (near_idx < len(remaining_near) or inter_idx < len(remaining_inter)):
             current_vf = (total_void_volume / total_volume) * 100.0
-            
-            # 
+
             if current_vf >= target_lower:
                 break
-            
-            # 
+
             if current_vf > target_upper:
                 break
-            
-            # w
+
             current_w = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-            
+
             if current_w < target_w and near_idx < len(remaining_near):
-                # wnear_fiber
                 elem_id = remaining_near[near_idx]
                 near_idx += 1
-                
+
                 if elem_id not in void_set:
                     elem_vol = elem_volumes.get(elem_id, 0.0)
-                    
-                    # 
+
                     predicted_vf = ((total_void_volume + elem_vol) / total_volume) * 100.0
                     if predicted_vf <= target_upper:
                         void_set.add(elem_id)
                         total_void_volume += elem_vol
                         near_fiber_volume += elem_vol
-            
+
             elif inter_idx < len(remaining_inter):
-                # winter_matrix
                 elem_id = remaining_inter[inter_idx]
                 inter_idx += 1
-                
+
                 if elem_id not in void_set:
                     elem_vol = elem_volumes.get(elem_id, 0.0)
-                    
-                    # 
+
                     predicted_vf = ((total_void_volume + elem_vol) / total_volume) * 100.0
                     if predicted_vf <= target_upper:
                         void_set.add(elem_id)
                         total_void_volume += elem_vol
                         inter_matrix_volume += elem_vol
             else:
-                # 
                 break
-        
+
         final_vf = (total_void_volume / total_volume) * 100.0
         final_w = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-        print("  After adding: Vf={:.4f}%, w={:.4f}".format(final_vf, final_w))
-    
-    # w
+
     elif final_vf > target_upper:
-        print("  Volume too high, removing elements while maintaining w...")
-        
-        # cluster
+
         current_clusters = cluster_adjacent_void_elements(void_set, elem_neighbors)
-        
+
         near_fiber_elems = set()
         inter_matrix_elems = set()
-        
+
         for cluster in current_clusters:
             is_near_fiber = _cluster_has_near_fiber(cluster, is_elem_near_fiber)
-            
+
             if is_near_fiber:
                 near_fiber_elems.update(cluster)
             else:
                 inter_matrix_elems.update(cluster)
-        
-        # 
+
         near_sorted = [(e, elem_volumes.get(e, 0.0)) for e in near_fiber_elems]
         inter_sorted = [(e, elem_volumes.get(e, 0.0)) for e in inter_matrix_elems]
         near_sorted.sort(key=lambda x: x[1], reverse=True)
         inter_sorted.sort(key=lambda x: x[1], reverse=True)
-        
+
         near_idx = 0
         inter_idx = 0
-        
+
         while (near_idx < len(near_sorted) or inter_idx < len(inter_sorted)):
             current_vf = (total_void_volume / total_volume) * 100.0
-            
-            # 
+
             if current_vf <= target_upper:
                 break
-            
-            # 
+
             if current_vf < target_lower:
                 break
-            
-            # w
+
             current_w = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-            
+
             if current_w > target_w and near_idx < len(near_sorted):
-                # wnear_fiber
                 elem_id, elem_vol = near_sorted[near_idx]
                 near_idx += 1
-                
-                # 
+
                 predicted_vf = ((total_void_volume - elem_vol) / total_volume) * 100.0
                 if predicted_vf >= target_lower:
                     void_set.discard(elem_id)
                     total_void_volume -= elem_vol
                     near_fiber_volume -= elem_vol
-            
+
             elif inter_idx < len(inter_sorted):
-                # winter_matrix
                 elem_id, elem_vol = inter_sorted[inter_idx]
                 inter_idx += 1
-                
-                # 
+
                 predicted_vf = ((total_void_volume - elem_vol) / total_volume) * 100.0
                 if predicted_vf >= target_lower:
                     void_set.discard(elem_id)
                     total_void_volume -= elem_vol
                     inter_matrix_volume -= elem_vol
             else:
-                # 
                 break
-        
+
         final_vf = (total_void_volume / total_volume) * 100.0
         final_w = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-        print("  After removing: Vf={:.4f}%, w={:.4f}".format(final_vf, final_w))
-    
-    # 
+
     if final_vf < target_lower or final_vf > target_upper:
-        print("\n" + "!"*70)
-        print("ERROR: Cannot achieve target volume within 99%-101% tolerance!")
-        print("  Current Vf: {:.4f}%".format(final_vf))
-        print("  Target range: {:.4f}% - {:.4f}%".format(target_lower, target_upper))
-        print("  This may be due to element size constraints.")
-        print("!"*70)
-    
-    # 
-    print("\n" + "-"*70)
-    print("FINAL STATISTICS")
-    print("-"*70)
-    
-    # clustertype
+        void_note_problem('Vvoid outside the 99%-101% tolerance', 'vvoid')
+
     final_clusters = cluster_adjacent_void_elements(void_set, elem_neighbors)
-    
+
     near_fiber_volume = 0.0
     inter_matrix_volume = 0.0
     near_fiber_count = 0
     inter_matrix_count = 0
     clusters_with_type = []
-    
+
     for cluster in final_clusters:
         is_near_fiber = _cluster_has_near_fiber(cluster, is_elem_near_fiber)
-        
+
         cluster_volume = _cluster_volume(cluster, elem_volumes)
-        
+
         if is_near_fiber:
             near_fiber_volume += cluster_volume
             near_fiber_count += 1
         else:
             inter_matrix_volume += cluster_volume
             inter_matrix_count += 1
-        
-        # typecluster
+
         clusters_with_type.append({
             'cluster': cluster,
             'type': 'near_fiber' if is_near_fiber else 'inter_matrix',
             'volume': cluster_volume
         })
-    
+
     total_void_volume = near_fiber_volume + inter_matrix_volume
     final_vf = (total_void_volume / total_volume) * 100.0
     final_w = near_fiber_volume / total_void_volume if total_void_volume > 0 else 0.0
-    
-    print("Total voids (clusters): {}".format(len(final_clusters)))
-    print("  Near-fiber:     {}".format(near_fiber_count))
-    print("  Inter-matrix:   {}".format(inter_matrix_count))
-    
-    print("\nVolume breakdown:")
-    print("  Near-fiber:     {:.6e}".format(near_fiber_volume))
-    print("  Inter-matrix:   {:.6e}".format(inter_matrix_volume))
-    print("  Total:          {:.6e}".format(total_void_volume))
-    
-    print("\nRealized Vf:      {:.4f}%".format(final_vf))
-    print("Target Vf:        {:.4f}%".format(target_vf))
-    print("Deviation:        {:.4f}%".format(abs(final_vf - target_vf)))
-    print("Realized w:       {:.4f}".format(final_w))
-    print("Target w:         {:.4f}".format(target_w))
-    print("w Deviation:      {:.4f}".format(abs(final_w - target_w)))
-    
+
     if abs(final_vf - target_vf) > 1.0:
-        print("\n" + "!"*70)
-        print("ERROR: Volume fraction deviation > 1%!")
-        print("Cannot proceed with this configuration.")
-        print("!"*70)
-    
-    print("="*70 + "\n")
-    
+        void_note_problem('Vvoid deviates from the target by more than 1%', 'vvoid')
+
     statistics = {
         'num_voids': len(final_clusters),
         'num_valid_voids': len(final_clusters),
@@ -4758,78 +4841,79 @@ def generate_voids_custom_w_random_theta(target_vf, target_w, all_matrix_element
         'clusters': final_clusters,
         'clusters_with_type': clusters_with_type
     }
-    
+
     return void_set, statistics
 
 def generate_voids_random_w_custom_theta(
-        part, matrix_element_labels, near_fiber_candidates, inter_matrix_candidates, 
+        part, matrix_element_labels, near_fiber_candidates, inter_matrix_candidates,
         element_volume_dict, element_centroid_dict, element_neighbors_dict,
-        fiber_nodes, target_volume, num_voids, target_elements_per_void, 
+        fiber_nodes, target_volume, num_voids, target_elements_per_void,
         void_theta_value, avg_element_volume, fiber_element_labels,
         element_nodes_dict):
     """
     3: w=Random, theta=Custom (Seed-Grow v7)
-    
+
     Key fix: NO permanent blacklist during normal growth.
     Fiber-enclosure and island checks use per-round skip sets
     (matching original grow_single_void_with_face_check behavior).
     Permanent blacklist only used for single-void restart scenario.
     """
-    
-    print("\n  ========== GENERATION MODE: Random w + Custom theta (Seed-Grow v7) ==========")
-    print("  Target void count (theta): {}".format(num_voids))
-    print("  Target void volume: {:.6e}".format(target_volume))
-    
+
+
     all_fiber_elements = set(fiber_element_labels)
     all_matrix_elements = set(matrix_element_labels)
-    
+    matrix_label_set = frozenset(element_volume_dict.keys())
+    near_fiber_candidates = _LabelList(near_fiber_candidates)
+    inter_matrix_candidates = _LabelList(inter_matrix_candidates)
+    fiber_element_labels = _LabelList(fiber_element_labels)
+
     theta_target = num_voids
     volume_lower = target_volume * 0.99
     volume_upper = target_volume * 1.01
-    
+
     state = _initialize_void_generation(
         near_fiber_candidates, inter_matrix_candidates,
         num_voids, None, 2, void_theta_value)
-    
+
     used_elements = state['used_elements']
     used_void_nodes = state['used_void_nodes']
     available_near_fiber = state['available_near_fiber']
     available_inter_matrix = state['available_inter_matrix']
-    
+
     # Permanent blacklist ONLY for single-void restart
     permanent_blacklist = set()
-    
+
     # ==================== Helpers ====================
-    
+
     def _get_elem_nodes(label):
         return element_nodes_dict.get(label, set())
-    
+
     def _get_elements_nodes(elem_set):
         nodes = set()
         for lbl in elem_set:
             nodes = nodes | _get_elem_nodes(lbl)
         return nodes
-    
+
     def _all_void_nodes_from_seeds(seed_list):
         nodes = set()
         for s in seed_list:
             nodes = nodes | s['nodes']
         return nodes
-    
+
     def _register_elem(lbl):
         used_elements.add(lbl)
         available_near_fiber.discard(lbl)
         available_inter_matrix.discard(lbl)
         for nl in _get_elem_nodes(lbl):
             used_void_nodes.add(nl)
-    
+
     def _unregister_elem(lbl):
         used_elements.discard(lbl)
         if lbl in near_fiber_candidates:
             available_near_fiber.add(lbl)
         elif lbl in inter_matrix_candidates:
             available_inter_matrix.add(lbl)
-    
+
     def _pick_seed(existing_void_nodes_set, bl_set):
         cands = []
         for c in available_near_fiber:
@@ -4844,27 +4928,27 @@ def generate_voids_random_w_custom_theta(
             if len(c_nodes & existing_void_nodes_set) == 0:
                 return c
         return None
-    
+
     def _compute_total_volume(seed_list):
         vol = 0.0
         for s in seed_list:
             for e in s['elements']:
                 vol += element_volume_dict.get(e, 0.0)
         return vol
-    
+
     def _collect_all_void_elems(seed_list):
         s = set()
         for sd in seed_list:
             s = s | sd['elements']
         return s
-    
+
     def _local_will_create_island(candidate, all_void_elems_set):
         """Incremental local island check with bounded BFS."""
-        test_void = all_void_elems_set | set([candidate])
+        # test_void = all_void_elems_set | {candidate}, tested without copying
         cand_neighbors = element_neighbors_dict.get(candidate, set())
         matrix_neighbors = []
         for nb in cand_neighbors:
-            if nb in all_matrix_elements and nb not in test_void:
+            if nb in all_matrix_elements and nb not in all_void_elems_set and nb != candidate:
                 matrix_neighbors.append(nb)
         if len(matrix_neighbors) <= 1:
             return False
@@ -4877,14 +4961,15 @@ def generate_voids_random_w_custom_theta(
             current = queue.popleft()
             visit_count += 1
             for nb in element_neighbors_dict.get(current, set()):
-                if nb in all_matrix_elements and nb not in test_void and nb not in visited:
+                if (nb in all_matrix_elements and nb not in all_void_elems_set
+                        and nb != candidate and nb not in visited):
                     visited.add(nb)
                     queue.append(nb)
         for mn in matrix_neighbors:
             if mn not in visited:
                 return True
         return False
-    
+
     def _try_grow_one(seed, seeds_list):
         """
         Try to grow a seed by one element.
@@ -4893,24 +4978,24 @@ def generate_voids_random_w_custom_theta(
         """
         void_elems = seed['elements']
         all_void_set = _collect_all_void_elems(seeds_list)
-        
+
         # Collect boundary
         boundary = set()
         for el in void_elems:
             for nb in element_neighbors_dict.get(el, set()):
                 if nb not in used_elements and nb not in permanent_blacklist:
                     boundary.add(nb)
-        
+
         if len(boundary) == 0:
             return False
-        
+
         # Distance-weighted first, then shuffled rest
         cent_list = []
         for e in void_elems:
             cent_list.append(element_centroid_dict[e])
         seed_centroid = np.mean(cent_list, axis=0)
-        best = distance_weighted_selection_debug(list(boundary), seed_centroid, element_centroid_dict)
-        
+        best = distance_weighted_selection(list(boundary), seed_centroid, element_centroid_dict)
+
         ordered = []
         if best is not None:
             ordered.append(best)
@@ -4919,44 +5004,43 @@ def generate_voids_random_w_custom_theta(
         for r in rest:
             if r != best:
                 ordered.append(r)
-        
-        # Per-call skip set (temporary, like rejected_in_this_growth in original)
+
+        # Elements rejected during this call
         skipped_this_call = set()
-        
+
         for selected in ordered:
             if selected in skipped_this_call:
                 continue
             if selected in permanent_blacklist:
                 continue
-            
+
             # Check 1: Fiber enclosure => skip THIS CALL only (not permanent)
             if will_isolate_fiber(selected, void_elems, element_neighbors_dict,
-                                  fiber_nodes, set(element_volume_dict.keys())):
+                                  fiber_nodes, matrix_label_set):
                 skipped_this_call.add(selected)
                 continue
-            
+
             # Check 2: Local island => skip THIS CALL only
             if _local_will_create_island(selected, all_void_set):
                 skipped_this_call.add(selected)
                 continue
-            
+
             # Accept
             seed['elements'].add(selected)
             seed['nodes'] = seed['nodes'] | _get_elem_nodes(selected)
             _register_elem(selected)
             return True
-        
+
         return False
-    
+
     # ==================== Step 1: Place initial seeds ====================
-    print("\n  Step 1: Selecting {} initial seed elements...".format(theta_target))
-    
+
     seeds = []
     for i in range(theta_target):
         all_vn = _all_void_nodes_from_seeds(seeds)
         seed_label = _pick_seed(all_vn, permanent_blacklist)
         if seed_label is None:
-            print("    WARNING: Could only place {} seeds (target: {})".format(
+            void_note_problem('only {} of {} void seeds could be placed'.format(
                 len(seeds), theta_target))
             break
         seed_nodes = _get_elem_nodes(seed_label)
@@ -4965,39 +5049,36 @@ def generate_voids_random_w_custom_theta(
             'nodes': set(seed_nodes),
         })
         _register_elem(seed_label)
-    
-    print("    Placed {} seeds".format(len(seeds)))
-    
+
+
     # ==================== Main growth loop ====================
     max_global_iterations = 10000
     global_iter = 0
     stall_counter = 0
     max_stall = 1000
     generation_success = False
-    
+
     while global_iter < max_global_iterations:
         global_iter += 1
-        
+
         cur_vol = _compute_total_volume(seeds)
         cur_count = len(seeds)
-        
+
         # ===== ONLY normal exit: both theta and volume satisfied =====
         if cur_count == theta_target and volume_lower <= cur_vol <= volume_upper:
-            print("\n  SUCCESS at iteration {}: {} voids, {:.4f}% volume".format(
-                global_iter, cur_count, cur_vol / target_volume * 100))
             generation_success = True
             break
-        
+
         if cur_vol > target_volume * 1.5:
-            print("\n  SAFETY STOP: volume exceeded 150%")
+            void_note_problem('void growth stopped: volume exceeded 150% of the target')
             break
-        
+
         if stall_counter >= max_stall:
-            print("\n  STALL after {} iterations".format(max_stall))
+            void_note_problem('void growth stalled after {} iterations'.format(max_stall))
             break
-        
+
         growth_happened = False
-        
+
         # ===== Step 2: Grow ALL seeds by one element each =====
         if cur_vol < volume_upper:
             for s_idx in range(len(seeds)):
@@ -5005,7 +5086,7 @@ def generate_voids_random_w_custom_theta(
                     break
                 if _try_grow_one(seeds[s_idx], seeds):
                     growth_happened = True
-        
+
         # ===== Step 3: Merging (face contact: >= 3 shared nodes) =====
         merged_indices = set()
         i = 0
@@ -5023,26 +5104,23 @@ def generate_voids_random_w_custom_theta(
                     seeds[i]['elements'] = seeds[i]['elements'] | seeds[j]['elements']
                     seeds[i]['nodes'] = seeds[i]['nodes'] | seeds[j]['nodes']
                     merged_indices.add(j)
-                    print("    Iter {}: Merged seed {} into {} ({} shared, {} elems)".format(
-                        global_iter, j, i, shared_n, len(seeds[i]['elements'])))
                     j = i + 1
                     continue
                 j += 1
             i += 1
-        
+
         if len(merged_indices) > 0:
             new_seeds = []
             for idx in range(len(seeds)):
                 if idx not in merged_indices:
                     new_seeds.append(seeds[idx])
             seeds = new_seeds
-        
+
         # ===== Step 4: Replenish seeds if count dropped =====
         while len(seeds) < theta_target:
             all_vn = _all_void_nodes_from_seeds(seeds)
             new_label = _pick_seed(all_vn, permanent_blacklist)
             if new_label is None:
-                print("    Iter {}: Cannot replenish".format(global_iter))
                 break
             new_nodes = _get_elem_nodes(new_label)
             seeds.append({
@@ -5050,8 +5128,7 @@ def generate_voids_random_w_custom_theta(
                 'nodes': set(new_nodes),
             })
             _register_elem(new_label)
-            print("    Iter {}: Replenished, now {} seeds".format(global_iter, len(seeds)))
-        
+
         # ===== Step 5: Single-void restart =====
         if theta_target == 1 and len(seeds) == 1:
             cur_vol_s = _compute_total_volume(seeds)
@@ -5064,17 +5141,14 @@ def generate_voids_random_w_custom_theta(
                         break
                 if has_boundary:
                     break
-            
+
             if not has_boundary and cur_vol_s < volume_lower:
-                print("    Single void stuck at {:.4f}%, restarting...".format(
-                    cur_vol_s / target_volume * 100))
                 for lbl in list(seeds[0]['elements']):
                     permanent_blacklist.add(lbl)
                     _unregister_elem(lbl)
                 seeds = []
                 new_label = _pick_seed(set(), permanent_blacklist)
                 if new_label is None:
-                    print("    All elements blacklisted, stopping.")
                     break
                 seeds.append({
                     'elements': set([new_label]),
@@ -5083,18 +5157,18 @@ def generate_voids_random_w_custom_theta(
                 _register_elem(new_label)
                 stall_counter = 0
                 continue
-        
+
         # ===== Step 6: Volume fine-tune when theta OK =====
         cur_count = len(seeds)
         cur_vol = _compute_total_volume(seeds)
-        
+
         if cur_count == theta_target and cur_vol < volume_lower:
             for si in range(len(seeds)):
                 if _compute_total_volume(seeds) >= volume_lower:
                     break
                 if _try_grow_one(seeds[si], seeds):
                     growth_happened = True
-        
+
         elif cur_count == theta_target and cur_vol > volume_upper:
             sorted_desc = sorted(range(len(seeds)),
                                   key=lambda k: len(seeds[k]['elements']), reverse=True)
@@ -5113,28 +5187,26 @@ def generate_voids_random_w_custom_theta(
                 if not edge:
                     continue
                 edge.sort(key=lambda e: element_volume_dict.get(e, 0.0), reverse=True)
+                keeps_connected = _connectivity_removable(void_set, element_neighbors_dict, empty_ok=True)
                 for candidate in edge:
-                    remaining = void_set - set([candidate])
-                    if not _is_connected(remaining, element_neighbors_dict):
+                    if candidate not in keeps_connected:
                         continue
                     sd['elements'].discard(candidate)
                     sd['nodes'] = _get_elements_nodes(sd['elements'])
                     _unregister_elem(candidate)
                     growth_happened = True
                     break
-        
+
         # Stall tracking
         if growth_happened:
             stall_counter = 0
         else:
             stall_counter += 1
-        
+
         # Progress
         if global_iter % 200 == 0:
             cur_vol = _compute_total_volume(seeds)
-            print("  Iter {}: {} seeds, vol={:.4f}%, stall={}".format(
-                global_iter, len(seeds), cur_vol / target_volume * 100, stall_counter))
-    
+
     # ==================== Build all_voids ====================
     all_voids = []
     for seed in seeds:
@@ -5160,75 +5232,61 @@ def generate_voids_random_w_custom_theta(
             'centroid': void_cent,
             'volume': void_vol
         })
-    
+
     final_count = len(all_voids)
     final_volume = 0.0
     for v in all_voids:
         final_volume += v['volume']
-    
+
     theta_ok = (final_count == theta_target)
     volume_ok = (volume_lower <= final_volume <= volume_upper)
-    
-    print("\n  ==================== Final Result ====================")
-    print("    Voids  : {} / {} ==> theta_ok={}".format(
-        final_count, num_voids, theta_ok))
-    print("    Volume : {:.6e} ({:.4f}%) ==> volume_ok={}".format(
-        final_volume, final_volume / target_volume * 100, volume_ok))
-    
+
     if not generation_success:
-        print("\n  *** GENERATION FAILED ***")
         if not theta_ok:
-            print("    - Void count mismatch: generated {} / target {}".format(
-                final_count, theta_target))
+            void_note_problem('theta not reached ({} of {} voids)'.format(
+                final_count, theta_target), 'theta')
         if not volume_ok:
-            print("    - Volume fraction mismatch: {:.4f}% / target {:.4f}%".format(
-                final_volume / target_volume * 100, 100.0))
-        print("    The result does NOT meet the specified targets.")
-        print("    Suggestion: try adjusting mesh density or void parameters.")
-    else:
-        print("\n  Generation completed successfully.")
-    
+            void_note_problem('Vvoid not reached ({:.2f}% of the target)'.format(
+                final_volume / target_volume * 100), 'vvoid')
+
     return _finalize_void_statistics(all_voids, element_neighbors_dict,
                                     element_volume_dict, element_centroid_dict)
 
 def generate_voids_custom_w_custom_theta(
-        part, matrix_element_labels, near_fiber_candidates, inter_matrix_candidates, 
+        part, matrix_element_labels, near_fiber_candidates, inter_matrix_candidates,
         element_volume_dict, element_centroid_dict, element_neighbors_dict,
-        fiber_nodes, target_volume, num_voids, target_elements_per_void, 
+        fiber_nodes, target_volume, num_voids, target_elements_per_void,
         target_near_ratio, void_distribution_value, void_theta_value,
         avg_element_volume, fiber_element_labels, element_nodes_dict,
         void_priority=1):
     """
     Case 4: w=Custom, theta=Custom (Unified)
-    
+
     All three targets are treated equally during normal convergence.
     Priority (void_priority) only affects which tolerance to relax
     when truly stuck:
       void_priority=1: relax theta first (preserve w)
       void_priority=2: relax w first (preserve theta)
-    
+
     Targets:
     - Volume: 99%-101% (never relaxed)
     - theta: exact match when <=10
     - w: +/-1% strict, +/-5% relaxed
     """
-    
+
     priority_label = 'w (Distribution)' if void_priority == 1 else 'theta (Size)'
-    
-    print("\n" + "="*70)
-    print("CASE 4: Custom w + Custom theta")
-    print("="*70)
-    print("  Target w:     {:.4f} (+/-1%)".format(target_near_ratio))
-    print("  Target theta: {}".format(num_voids))
-    print("  Target Vf:    {:.2f}% (+/-1%)".format((target_volume / part.getVolume()) * 100))
-    print("  Fallback priority: {} (only used when stuck)".format(priority_label))
-    print("="*70)
-    
+
+    matrix_label_set = frozenset(element_volume_dict.keys())
+    near_fiber_candidates = _LabelList(near_fiber_candidates)
+    inter_matrix_candidates = _LabelList(inter_matrix_candidates)
+    matrix_element_labels = _LabelList(matrix_element_labels)
+    fiber_element_labels = _LabelList(fiber_element_labels)
+
     # ========== Initialization ==========
     state = _initialize_void_generation(
-        near_fiber_candidates, inter_matrix_candidates, 
+        near_fiber_candidates, inter_matrix_candidates,
         num_voids, target_near_ratio, 1, void_theta_value)
-    
+
     all_voids = state['all_voids']
     used_elements = state['used_elements']
     used_void_nodes = state['used_void_nodes']
@@ -5239,7 +5297,7 @@ def generate_voids_custom_w_custom_theta(
     current_inter_voids = state['current_inter_voids']
     target_near_voids = state['target_near_voids']
     target_inter_voids = state['target_inter_voids']
-    
+
     max_iterations = num_voids * 200
     iteration = 0
     consecutive_failures = 0
@@ -5253,8 +5311,7 @@ def generate_voids_custom_w_custom_theta(
         for _ in range(i):
             next(it)
         return next(it)
-    
-    print("\n--- Phase 1: Seed Growth ---")
+
 
     volume_lower = target_volume * 0.99
     volume_upper = target_volume * 1.01
@@ -5270,7 +5327,7 @@ def generate_voids_custom_w_custom_theta(
             break
 
         if consecutive_failures >= max_consecutive_failures:
-            print("  WARNING: Max consecutive failures reached")
+            void_note_problem('void growth stopped after repeated placement failures')
             break
 
         seed_type = select_seed_type(
@@ -5311,7 +5368,8 @@ def generate_voids_custom_w_custom_theta(
             element_neighbors_dict, used_elements,
             target_elements_per_void, avg_element_volume,
             available_near_fiber, available_inter_matrix,
-            1, target_near_ratio, part, used_void_nodes, fiber_nodes, element_nodes_dict)
+            1, target_near_ratio, part, used_void_nodes, fiber_nodes, element_nodes_dict,
+            matrix_label_set=matrix_label_set)
 
         if void_elements:
             has_fiber_contact = False
@@ -5354,18 +5412,11 @@ def generate_voids_custom_w_custom_theta(
                 current_inter_voids += 1
                 current_inter_volume += void_volume
 
-            if len(all_voids) % 10 == 0:
-                print("  Generated {} / {} voids, Vf={:.2f}%".format(
-                    len(all_voids), num_voids,
-                    current_total_volume / target_volume * 100))
         else:
             consecutive_failures += 1
 
-    print("  Phase 1 complete: {} voids, {:.2f}% volume".format(
-        len(all_voids), current_total_volume / target_volume * 100))
-    
+
     # ========== Phase 2: Post-processing (Islands + Volume) ==========
-    print("\n--- Phase 2: Post-processing (Islands + Volume) ---")
 
     all_matrix_elements = set(matrix_element_labels)
     all_fiber_elements = set(fiber_element_labels)
@@ -5381,11 +5432,9 @@ def generate_voids_custom_w_custom_theta(
             element_centroid_dict, all_matrix_elements, part,
             target_volume, used_elements, fiber_nodes, all_fiber_elements, element_nodes_dict)
 
-    print("  Phase 2 complete: {} voids".format(len([v for v in all_voids if v['elements']])))
-    
+
     # ========== Phase 3: Triple-Target Correction (Equal Treatment) ==========
-    print("\n--- Phase 3: Triple-Target Correction (Equal Treatment) ---")
-    
+
     theta_strict_always = (num_voids <= 10)
 
     # Strict tolerances
@@ -5404,17 +5453,68 @@ def generate_voids_custom_w_custom_theta(
     theta_relaxed = False
     w_relaxed = False
 
-    print("  Targets (all STRICT initially):")
-    print("    theta: {} (strict_always={})".format(num_voids, theta_strict_always))
-    print("    w:     {:.4f} +/-1%".format(target_near_ratio))
-    print("    Vf:    99%-101%")
-    print("    Fallback priority: {}".format(priority_label))
 
     max_final_iterations = 2000
     final_iter = 0
     consecutive_success = 0
     consecutive_no_progress = 0
     max_no_progress = 50
+
+    def _seed_extra_void(prefer_near):
+        """Grow one small void of the preferred type (falling back to the
+        other type) from a free element.  Returns True when a void was added."""
+        if target_near_ratio == 0.0:
+            order = ['inter_matrix']
+        elif target_near_ratio == 1.0:
+            order = ['near_fiber']
+        elif prefer_near:
+            order = ['near_fiber', 'inter_matrix']
+        else:
+            order = ['inter_matrix', 'near_fiber']
+        for seed_type in order:
+            pool = available_near_fiber if seed_type == 'near_fiber' else available_inter_matrix
+            if not pool:
+                continue
+            for _attempt in range(5):
+                seed_label = _random_from_set(pool)
+                if seed_label in used_elements:
+                    pool.discard(seed_label)
+                    if not pool:
+                        break
+                    continue
+                if element_nodes_dict.get(seed_label, set()) & used_void_nodes:
+                    continue      # would touch an existing void
+                small_target = 2
+                new_void_elements, new_void_type = grow_single_void_with_face_check(
+                    seed_label, seed_type, element_volume_dict, element_centroid_dict,
+                    element_neighbors_dict, used_elements,
+                    small_target, avg_element_volume,
+                    available_near_fiber, available_inter_matrix,
+                    1, target_near_ratio, part, used_void_nodes, fiber_nodes, element_nodes_dict,
+                    matrix_label_set=matrix_label_set)
+                if not new_void_elements:
+                    continue
+                touches = False
+                for new_elem in new_void_elements:
+                    if element_nodes_dict.get(new_elem, set()) & used_void_nodes:
+                        touches = True
+                        break
+                if touches:
+                    continue
+                has_fiber_contact = any([e in near_fiber_candidates for e in new_void_elements])
+                for label in new_void_elements:
+                    used_elements.add(label)
+                    available_near_fiber.discard(label)
+                    available_inter_matrix.discard(label)
+                    used_void_nodes.update(element_nodes_dict.get(label, set()))
+                all_voids.append({
+                    'elements': list(new_void_elements),
+                    'type': 'near_fiber' if has_fiber_contact else 'inter_matrix',
+                    'centroid': np.mean([element_centroid_dict[e] for e in new_void_elements], axis=0),
+                    'volume': sum([element_volume_dict.get(e, 0.0) for e in new_void_elements]),
+                })
+                return True
+        return False
 
     while final_iter < max_final_iterations:
         final_iter += 1
@@ -5451,15 +5551,12 @@ def generate_voids_custom_w_custom_theta(
             if w_relaxed:
                 mode_parts.append("w-RELAXED")
             mode_str = ", ".join(mode_parts) if mode_parts else "STRICT"
-            print("  Iter {} [{}]: theta={}/{}, Vf={:.2f}%, w={:.4f}".format(
-                final_iter, mode_str, valid_void_count, num_voids, volume_ratio * 100, current_w))
 
         if theta_ok and volume_ok and w_ok:
             if volume_ratio >= 1.00:
                 # Fully converged: volume at or above 100%
                 consecutive_success += 1
                 if consecutive_success >= 3:
-                    print("  SUCCESS: Converged at iter {}".format(final_iter))
                     break
             else:
                 # In 99-100% band: acceptable but keep trying to reach 100%
@@ -5473,30 +5570,24 @@ def generate_voids_custom_w_custom_theta(
         if consecutive_no_progress >= max_no_progress:
             if void_priority == 1 and not theta_relaxed and not theta_strict_always:
                 # w is more important => relax theta first
-                print("\n  Stuck {} iters => relaxing THETA tolerance (w priority)".format(max_no_progress))
-                print("  Theta range: [{}, {}]".format(theta_lower_relaxed, theta_upper_relaxed))
                 theta_relaxed = True
                 consecutive_no_progress = 0
                 consecutive_success = 0
                 continue
             elif void_priority == 2 and not w_relaxed:
                 # theta is more important => relax w first
-                print("\n  Stuck {} iters => relaxing W tolerance (theta priority)".format(max_no_progress))
-                print("  W tolerance: +/-5%")
                 w_relaxed = True
                 consecutive_no_progress = 0
                 consecutive_success = 0
                 continue
             elif not theta_relaxed and not theta_strict_always:
                 # Second fallback: relax theta
-                print("\n  Stuck {} iters => relaxing THETA tolerance (second fallback)".format(max_no_progress))
                 theta_relaxed = True
                 consecutive_no_progress = 0
                 consecutive_success = 0
                 continue
             elif not w_relaxed:
                 # Second fallback: relax w
-                print("\n  Stuck {} iters => relaxing W tolerance (second fallback)".format(max_no_progress))
                 w_relaxed = True
                 consecutive_no_progress = 0
                 consecutive_success = 0
@@ -5504,79 +5595,69 @@ def generate_voids_custom_w_custom_theta(
             else:
                 # All relaxed, check if volume is at least OK
                 if volume_ok:
-                    print("\n  All tolerances relaxed, volume OK => accepting result.")
                     break
                 else:
-                    print("\n  WARNING: Still stuck, continuing to fix volume...")
                     consecutive_no_progress = 0
 
         # ========== Equal treatment: volume -> theta -> w ==========
-        
+
         if not volume_ok or volume_ratio < 1.00:
             # --- Adjust Volume (target center: 100%, accept 99-101%) ---
             if volume_ratio > 1.01:
-                
+                removed = False
+
                 if total_volume_current > 0:
                     near_ratio = near_volume / total_volume_current
                 else:
                     near_ratio = 0.5
-                
+
                 # Remove from whichever type is over-represented
                 if near_ratio > target_near_ratio:
                     shrink_voids = [v for v in all_voids if v['type'] == 'near_fiber' and len(v['elements']) > 2]
                 else:
                     shrink_voids = [v for v in all_voids if v['type'] == 'inter_matrix' and len(v['elements']) > 1]
-                
+
                 if not shrink_voids:
                     shrink_voids = [v for v in all_voids if len(v['elements']) > 1]
-                
-                if shrink_voids:
-                    shrink_voids.sort(key=lambda v: v['volume'], reverse=True)
-                    v = shrink_voids[0]
-                    void_set = set(v['elements'])
-                    
-                    # Find safe boundary element (won't disconnect void, won't touch other void)
-                    other_void_elems = set()
-                    for ov in all_voids:
-                        if ov is not v:
-                            other_void_elems.update(ov['elements'])
-                    
-                    safe_boundary = []
-                    for e in v['elements']:
-                        nb_set = element_neighbors_dict.get(e, set())
-                        is_boundary = bool(nb_set - void_set)
-                        touches_other = bool(nb_set & other_void_elems)
-                        if is_boundary and not touches_other:
-                            remaining = void_set - {e}
-                            if remaining and _is_connected(remaining, element_neighbors_dict):
-                                safe_boundary.append(e)
-                    
-                    if safe_boundary:
-                        safe_boundary.sort(key=lambda e: element_volume_dict.get(e, 0.0))
-                        elem_to_remove = safe_boundary[0]
-                        v['elements'].remove(elem_to_remove)
-                        used_elements.discard(elem_to_remove)
-                        if elem_to_remove in near_fiber_candidates:
-                            available_near_fiber.add(elem_to_remove)
-                        elif elem_to_remove in inter_matrix_candidates:
-                            available_inter_matrix.add(elem_to_remove)
-                        v['volume'] -= element_volume_dict.get(elem_to_remove, 0.0)
-                        if v['elements']:
-                            centroid_list = [element_centroid_dict[e] for e in v['elements']]
-                            v['centroid'] = np.mean(centroid_list, axis=0)
-                        removed = True
-                
+
+                # Try every candidate void, largest first: the largest one may
+                # have no element that can be released without disconnecting it
+                # or touching a neighbouring void.
+                shrink_voids.sort(key=lambda v: v['volume'], reverse=True)
+                all_void_elements = set()
+                for x in all_voids:
+                    all_void_elements.update(x['elements'])
+                for v in shrink_voids:
+                    safe_boundary = void_removable_elements(v, all_voids, element_neighbors_dict,
+                                                            all_void_elements)
+                    if not safe_boundary:
+                        continue
+                    safe_boundary.sort(key=lambda e: element_volume_dict.get(e, 0.0))
+                    elem_to_remove = safe_boundary[0]
+                    v['elements'].remove(elem_to_remove)
+                    used_elements.discard(elem_to_remove)
+                    if elem_to_remove in near_fiber_candidates:
+                        available_near_fiber.add(elem_to_remove)
+                    elif elem_to_remove in inter_matrix_candidates:
+                        available_inter_matrix.add(elem_to_remove)
+                    v['volume'] -= element_volume_dict.get(elem_to_remove, 0.0)
+                    if v['elements']:
+                        centroid_list = [element_centroid_dict[e] for e in v['elements']]
+                        v['centroid'] = np.mean(centroid_list, axis=0)
+                    removed = True
+                    break
+
                 if not removed:
                     consecutive_no_progress += 1
-            
+
             else:  # volume_ratio < 0.99
                 added = False
-                
+
                 if total_volume_current > 0:
                     near_ratio = near_volume / total_volume_current
                 else:
                     near_ratio = target_near_ratio
-                
+
                 # Add to whichever type is under-represented
                 if near_ratio < target_near_ratio:
                     target_voids = [v for v in all_voids if v['type'] == 'near_fiber' and v['elements']]
@@ -5586,23 +5667,13 @@ def generate_voids_custom_w_custom_theta(
                     target_voids = [v for v in all_voids if v['type'] == 'inter_matrix' and v['elements']]
                     if not target_voids:
                         target_voids = [v for v in all_voids if v['elements']]
-                
+
+                node_counts, nodes_of_void = _void_node_index(all_voids, element_nodes_dict)
                 for v in target_voids:
                     candidate_neighbors = set()
                     void_elem_set = set(v['elements'])
-                    
-                    other_void_elems = set()
-                    for other_v in all_voids:
-                        if other_v is not v:
-                            other_void_elems.update(other_v['elements'])
-                    
-                    # Build other-void node set for strict node isolation
-                    other_void_nodes = set()
-                    for other_v in all_voids:
-                        if other_v is not v:
-                            for oe in other_v['elements']:
-                                other_void_nodes.update(element_nodes_dict.get(oe, set()))
-                    
+                    own_nodes = nodes_of_void[id(v)]
+
                     for elem_label in v['elements']:
                         for neighbor in element_neighbors_dict.get(elem_label, set()):
                             if neighbor in used_elements:
@@ -5614,12 +5685,15 @@ def generate_voids_custom_w_custom_theta(
                                 continue
                             if target_near_ratio == 1.0 and neighbor in available_inter_matrix:
                                 continue
+                            if (v['type'] == 'inter_matrix' and neighbor in available_near_fiber
+                                    and target_near_ratio < 1.0):
+                                continue      # keeps the void inter-matrix
                             # Strict node isolation: no shared nodes with other voids
                             neighbor_nodes = element_nodes_dict.get(neighbor, set())
-                            if neighbor_nodes & other_void_nodes:
+                            if _touches_other_void(neighbor_nodes, node_counts, own_nodes):
                                 continue
                             candidate_neighbors.add(neighbor)
-                    
+
                     if candidate_neighbors:
                         candidates = list(candidate_neighbors)
                         random.shuffle(candidates)
@@ -5628,7 +5702,7 @@ def generate_voids_custom_w_custom_theta(
                             if will_isolate_fiber(neighbor_to_add, void_elements_test, element_neighbors_dict,
                                                 fiber_element_labels, matrix_element_labels):
                                 continue
-                            
+
                             v['elements'].append(neighbor_to_add)
                             used_elements.add(neighbor_to_add)
                             available_near_fiber.discard(neighbor_to_add)
@@ -5640,104 +5714,29 @@ def generate_voids_custom_w_custom_theta(
                             break
                     if added:
                         break
-                
+
+                if not added and valid_void_count < theta_upper:
+                    # The existing voids of the under-represented type cannot
+                    # grow (on a dense packing the inter-matrix pool is a set of
+                    # thin ligaments); the count tolerance still allows another
+                    # void, so seed one of that type instead.
+                    added = _seed_extra_void(near_ratio < target_near_ratio)
+
                 if not added:
                     consecutive_no_progress += 1
-        
+
         elif not theta_ok:
             # --- Adjust Theta ---
             if valid_void_count < theta_lower:
-                # Need more voids
-                if target_near_ratio == 0.0:
-                    candidate_pool = list(available_inter_matrix)
-                elif target_near_ratio == 1.0:
-                    candidate_pool = list(available_near_fiber)
+                # Need more voids, preferably of the under-represented type
+                if total_volume_current > 0:
+                    prefer_near = (near_volume / total_volume_current) < target_near_ratio
                 else:
-                    candidate_pool = list(available_near_fiber) + list(available_inter_matrix)
-                if not candidate_pool:
+                    prefer_near = random.random() < target_near_ratio
+                if not _seed_extra_void(prefer_near):
                     consecutive_no_progress += 1
-                    continue
-                
-                seed_label = random.choice(candidate_pool)
-                seed_type = 'near_fiber' if seed_label in available_near_fiber else 'inter_matrix'
-                small_target = max(2, int(avg_element_volume * 2 / avg_element_volume))
-                
-                new_void_elements, new_void_type = grow_single_void_with_face_check(
-                    seed_label, seed_type, element_volume_dict, element_centroid_dict,
-                    element_neighbors_dict, used_elements,
-                    small_target, avg_element_volume,
-                    available_near_fiber, available_inter_matrix, 
-                    1, target_near_ratio, part, used_void_nodes, fiber_nodes, element_nodes_dict)
-                
-                if new_void_elements:
-                    # Check connectivity with existing voids
-                    all_existing_void_nodes = set()
-                    for existing_v in all_voids:
-                        if existing_v['elements']:
-                            for existing_elem in existing_v['elements']:
-                                all_existing_void_nodes |= element_nodes_dict.get(existing_elem, set())
-                    
-                    would_connect = False
-                    max_shared = 0
-                    for new_elem in new_void_elements:
-                        try:
-                            new_elem_nodes = element_nodes_dict.get(new_elem, set())
-                            shared = new_elem_nodes & all_existing_void_nodes
-                            if len(shared) > max_shared:
-                                max_shared = len(shared)
-                            if shared:
-                                would_connect = True
-                                break
-                        except:
-                            pass
-                    
-                    if would_connect:
-                        print("    New void shares {} nodes with existing void, skipped".format(max_shared))
-                        for label in new_void_elements:
-                            used_elements.discard(label)
-                            if label in near_fiber_candidates:
-                                available_near_fiber.add(label)
-                            elif label in inter_matrix_candidates:
-                                available_inter_matrix.add(label)
-                            try:
-                                used_void_nodes.update(element_nodes_dict.get(label, set()))
-                                for node in element.getNodes():
-                                    used_void_nodes.discard(node.label)
-                            except:
-                                pass
-                    else:
-                        has_fiber_contact = False
-                        for elem_label in new_void_elements:
-                            if elem_label in near_fiber_candidates:
-                                has_fiber_contact = True
-                                break
-                        actual_type = 'near_fiber' if has_fiber_contact else 'inter_matrix'
-                        
-                        for label in new_void_elements:
-                            used_elements.add(label)
-                            available_near_fiber.discard(label)
-                            available_inter_matrix.discard(label)
-                            try:
-                                used_void_nodes.update(element_nodes_dict.get(label, set()))
-                                for node in element.getNodes():
-                                    used_void_nodes.add(node.label)
-                            except:
-                                pass
-                        
-                        new_void_volume = sum([element_volume_dict.get(e, 0.0) for e in new_void_elements])
-                        centroid_list = [element_centroid_dict[e] for e in new_void_elements]
-                        new_centroid = np.mean(centroid_list, axis=0)
-                        
-                        all_voids.append({
-                            'elements': list(new_void_elements),
-                            'type': actual_type,
-                            'centroid': new_centroid,
-                            'volume': new_void_volume
-                        })
-                        print("    Added void (theta: {} -> {})".format(valid_void_count, valid_void_count + 1))
-                else:
-                    print("    Failed to generate void")
-            
+                continue
+
             elif valid_void_count > theta_upper:
                 # Too many voids: remove smallest
                 non_empty_voids = [v for v in all_voids if v['elements']]
@@ -5753,10 +5752,9 @@ def generate_voids_custom_w_custom_theta(
                             available_inter_matrix.add(elem_label)
                         for node_label in element_nodes_dict.get(elem_label, set()):
                             used_void_nodes.discard(node_label)
-                    print("    Removed smallest void (theta: {} -> {})".format(valid_void_count, valid_void_count - 1))
                 else:
                     consecutive_no_progress += 1
-        
+
         elif not w_ok:
             # --- Adjust w (shrink-grow, never transfer) ---
             if current_w > target_near_ratio + w_tol:
@@ -5774,30 +5772,30 @@ def generate_voids_custom_w_custom_theta(
             else:
                 donor_voids = []
                 grow_voids = []
-            
+
             w_adjusted = False
-            
+
             if donor_voids and grow_voids:
                 # Step 1: remove safe boundary element from donor
                 donor_voids.sort(key=lambda v: v['volume'], reverse=True)
                 donor_void = donor_voids[0]
                 donor_set = set(donor_void['elements'])
-                
+
                 other_void_elems = set()
                 for ov in all_voids:
                     if ov is not donor_void:
                         other_void_elems.update(ov['elements'])
-                
+
                 safe_boundary = []
+                keeps_connected = _connectivity_removable(donor_set, element_neighbors_dict)
                 for e in donor_void['elements']:
                     nb_set = element_neighbors_dict.get(e, set())
                     is_boundary = bool(nb_set - donor_set)
                     touches_other = bool(nb_set & other_void_elems)
                     if is_boundary and not touches_other:
-                        remaining = donor_set - {e}
-                        if remaining and _is_connected(remaining, element_neighbors_dict):
+                        if e in keeps_connected:
                             safe_boundary.append(e)
-                
+
                 if safe_boundary:
                     safe_boundary.sort(key=lambda e: element_volume_dict.get(e, 0.0))
                     elem_to_remove = safe_boundary[0]
@@ -5811,7 +5809,7 @@ def generate_voids_custom_w_custom_theta(
                     if donor_void['elements']:
                         centroid_list = [element_centroid_dict[e] for e in donor_void['elements']]
                         donor_void['centroid'] = np.mean(centroid_list, axis=0)
-                    
+
                     # Step 2: grow edge element on recipient
                     for rv in grow_voids:
                         rv_set = set(rv['elements'])
@@ -5819,7 +5817,7 @@ def generate_voids_custom_w_custom_theta(
                         for ov in all_voids:
                             if ov is not rv:
                                 other_rv_elems.update(ov['elements'])
-                        
+
                         for elem_label in rv['elements']:
                             for neighbor in element_neighbors_dict.get(elem_label, set()):
                                 if neighbor in used_elements:
@@ -5830,6 +5828,9 @@ def generate_voids_custom_w_custom_theta(
                                     continue
                                 if target_near_ratio == 1.0 and neighbor in available_inter_matrix:
                                     continue
+                                if (rv['type'] == 'inter_matrix' and neighbor in available_near_fiber
+                                        and target_near_ratio < 1.0):
+                                    continue      # keeps the void inter-matrix
                                 nb_neighbors = element_neighbors_dict.get(neighbor, set())
                                 if nb_neighbors & other_rv_elems:
                                     continue
@@ -5842,7 +5843,7 @@ def generate_voids_custom_w_custom_theta(
                                             other_rv_nodes.update(element_nodes_dict.get(oe, set()))
                                 if neighbor_nodes & other_rv_nodes:
                                     continue
-                                
+
                                 rv['elements'].append(neighbor)
                                 rv['volume'] += element_volume_dict.get(neighbor, 0.0)
                                 used_elements.add(neighbor)
@@ -5854,21 +5855,20 @@ def generate_voids_custom_w_custom_theta(
                                 break
                         if w_adjusted:
                             break
-            
+
             if not w_adjusted:
-                print("    Cannot adjust w this iteration")
                 consecutive_no_progress += 1
-            
+
             elif current_w < target_near_ratio - w_tol:
                 # w too low: transfer from inter_matrix to near_fiber
                 inter_voids = [v for v in all_voids if v['type'] == 'inter_matrix' and len(v['elements']) > 1]
                 near_voids = [v for v in all_voids if v['type'] == 'near_fiber' and v['elements']]
-                
+
                 if inter_voids and near_voids:
                     inter_voids.sort(key=lambda v: v['volume'], reverse=True)
                     donor_void = inter_voids[0]
                     elem_to_transfer = donor_void['elements'][-1]
-                    
+
                     elem_centroid = element_centroid_dict[elem_to_transfer]
                     min_dist = float('inf')
                     recipient_void = near_voids[0]
@@ -5877,40 +5877,49 @@ def generate_voids_custom_w_custom_theta(
                         if dist < min_dist:
                             min_dist = dist
                             recipient_void = v
-                    
+
                     elem_neighbors_set = element_neighbors_dict.get(elem_to_transfer, set())
                     other_void_elems = set()
                     for ov in all_voids:
                         if ov is not donor_void and ov is not recipient_void:
                             other_void_elems.update(ov['elements'])
-                    
-                    if elem_neighbors_set & other_void_elems:
-                        print("    Skipped transfer - would touch a third void")
-                    else:
+
+                    if not (elem_neighbors_set & other_void_elems):
                         donor_void['elements'].remove(elem_to_transfer)
                         recipient_void['elements'].append(elem_to_transfer)
-                        
+
                         elem_vol = element_volume_dict.get(elem_to_transfer, 0.0)
                         donor_void['volume'] -= elem_vol
                         recipient_void['volume'] += elem_vol
-                        
+
                         if donor_void['elements']:
                             centroid_list = [element_centroid_dict[e] for e in donor_void['elements']]
                             donor_void['centroid'] = np.mean(centroid_list, axis=0)
                         centroid_list = [element_centroid_dict[e] for e in recipient_void['elements']]
                         recipient_void['centroid'] = np.mean(centroid_list, axis=0)
-                else:
-                    print("    Cannot adjust w (no suitable voids)")
-    
+
+    # ========== Guarantee the void volume fraction ==========
+    # theta and w may end up outside their tolerance on a mesh that cannot
+    # satisfy them, but Vvoid is the target the plug-in must always meet.
+    force_void_volume_into_tolerance(
+        all_voids, target_volume, element_volume_dict, element_centroid_dict,
+        element_neighbors_dict, element_nodes_dict, used_elements,
+        available_near_fiber, available_inter_matrix,
+        near_fiber_candidates, inter_matrix_candidates,
+        fiber_element_labels, matrix_element_labels,
+        target_near_ratio=target_near_ratio)
+
+    # ========== Classification by contact (a cluster is fiber-adjacent if any
+    # element touches a fiber) ==========
+    for v in all_voids:
+        if v['elements']:
+            v['type'] = 'near_fiber' if any([e in near_fiber_candidates for e in v['elements']]) else 'inter_matrix'
+
     # ========== Final Verification ==========
-    print("\n" + "="*70)
-    print("FINAL VERIFICATION - CASE 4")
-    print("="*70)
-    
     near_volume = 0.0
     inter_volume = 0.0
     final_void_count = 0
-    
+
     for v in all_voids:
         if v['elements']:
             final_void_count += 1
@@ -5918,45 +5927,41 @@ def generate_voids_custom_w_custom_theta(
                 near_volume += v['volume']
             else:
                 inter_volume += v['volume']
-    
+
     final_total_volume = near_volume + inter_volume
     final_w = near_volume / max(final_total_volume, 1e-20)
     final_volume_ratio = final_total_volume / target_volume
-    
+
     w_tol_final = w_tolerance_relaxed if w_relaxed else w_tolerance_strict
     theta_tol_final = theta_tolerance_relaxed if theta_relaxed else theta_tolerance_strict
     theta_lower_final = theta_lower_relaxed if theta_relaxed else theta_lower_strict
     theta_upper_final = theta_upper_relaxed if theta_relaxed else theta_upper_strict
-    
-    print("  Final theta:  {} (target: {} +/-{}, range: [{}, {}])".format(
-        final_void_count, num_voids, theta_tol_final, theta_lower_final, theta_upper_final))
-    print("  Final Vf:     {:.2f}% (target: 99-101%)".format(final_volume_ratio * 100))
-    print("  Final w:      {:.4f} (target: {:.4f} +/-{:.1f}%)".format(
-        final_w, target_near_ratio, w_tol_final * 100))
-    
+
     theta_ok = (final_void_count >= theta_lower_final and final_void_count <= theta_upper_final)
     volume_ok = (final_volume_ratio >= 0.99 and final_volume_ratio <= 1.01)
     w_ok = (abs(final_w - target_near_ratio) <= w_tol_final)
-    
-    print("\n  Results:")
-    print("      Theta: {}".format("PASS" if theta_ok else "FAIL (deviation: {})".format(final_void_count - num_voids)))
-    print("      Volume: {}".format("PASS" if volume_ok else "FAIL (ratio: {:.2f}%)".format(final_volume_ratio * 100)))
-    print("      w-value: {}".format("PASS" if w_ok else "FAIL (deviation: {:.4f})".format(abs(final_w - target_near_ratio))))
-    
+
+    # report a relaxation only when the final value actually needed it
+    theta_strict_ok = (theta_lower_strict <= final_void_count <= theta_upper_strict)
+    w_strict_ok = (abs(final_w - target_near_ratio) <= w_tolerance_strict)
     relaxed_parts = []
-    if theta_relaxed:
+    if theta_relaxed and not theta_strict_ok:
         relaxed_parts.append("theta")
-    if w_relaxed:
+    if w_relaxed and not w_strict_ok:
         relaxed_parts.append("w")
-    if relaxed_parts:
-        print("\n  Note: Converged with RELAXED tolerances for: {}".format(", ".join(relaxed_parts)))
-    else:
-        print("\n  Note: Converged in STRICT mode (all tolerances met)")
-    
-    print("="*70 + "\n")
-    
+    void_note_relaxed(relaxed_parts)
+
+    if not theta_ok:
+        void_note_problem('theta not reached ({} of {} voids)'.format(
+            final_void_count, num_voids), 'theta')
+    if not volume_ok:
+        void_note_problem('Vvoid not reached ({:.2f}% of the target)'.format(
+            final_volume_ratio * 100), 'vvoid')
+    if not w_ok:
+        void_note_problem('w not reached ({:.4f} against a target of {:.4f})'.format(
+            final_w, target_near_ratio), 'w')
+
     # ========== Pre-finalize connectivity check (warning only) ==========
-    print("\n  Pre-finalize connectivity check...")
     all_void_elems_check = set()
     elem_to_idx = {}
     valid_now = [v for v in all_voids if v['elements']]
@@ -5976,28 +5981,26 @@ def generate_voids_custom_w_custom_theta(
         if connected_found:
             break
     if connected_found:
-        print("  WARNING: Connected voids detected — adjacency check may need review.")
-    else:
-        print("  Pre-finalize: no connected voids detected.")
+        void_note_problem('connected voids detected')
 
     return _finalize_void_statistics(all_voids, element_neighbors_dict, element_volume_dict, element_centroid_dict)
 
 ########################################
-def seed_growth_void_generation(part, matrix_element_labels, near_fiber_candidates, 
-                                inter_matrix_candidates, element_volume_dict, 
+def seed_growth_void_generation(part, matrix_element_labels, near_fiber_candidates,
+                                inter_matrix_candidates, element_volume_dict,
                                 element_centroid_dict, element_neighbors_dict,
-                                fiber_nodes, fiber_element_labels, target_volume, 
+                                fiber_nodes, fiber_element_labels, target_volume,
                                 num_voids, target_elements_per_void, target_near_ratio,
                                 void_distribution_value, void_theta_value, void_priority,
                                 avg_element_volume, element_nodes_dict):
     """
     5
-    
-    
+
+
     - void_distribution_value == 'Random' ==> w_is_random = True
     - void_theta_value == 'Random' ==> theta_is_random = True
     - void_priority: 1=(w), 2=(theta), 3=
-    
+
     5
     1. w=Random, theta=Random
     2. w=Custom, theta=Random
@@ -6005,151 +6008,101 @@ def seed_growth_void_generation(part, matrix_element_labels, near_fiber_candidat
     4. w=Custom, theta=Custom, Distribution Priority (w)
     5. w=Custom, theta=Custom, Size Priority (theta)
     """
-    
-    # ==========  ==========
+
     w_is_random = (void_distribution_value == 'Random')
     theta_is_random = (void_theta_value == 'Random')
-    
-    print("\n" + "="*70)
-    print("SEED GROWTH VOID GENERATION - MAIN DISPATCHER")
-    print("="*70)
-    
-    # 
-    if w_is_random:
-        print("  w (distribution):  Random")
-    else:
-        if target_near_ratio is not None:
-            print("  w (distribution):  Custom ({:.2f})".format(target_near_ratio))
-        else:
-            print("  w (distribution):  Custom (value: {})".format(void_distribution_value))
-    
-    if theta_is_random:
-        print("  theta (size):      Random")
-    else:
-        print("  theta (size):      Custom ({})".format(num_voids))
-    
-    if not w_is_random and not theta_is_random:
-        print("  Priority:          {}".format('Distribution (w)' if void_priority == 1 else 'Size (theta)'))
-    
-    print("="*70 + "\n")
-    
-    # ========== 12 ==========
+
     if w_is_random or (not w_is_random and theta_is_random):
-        # 
-        print("Preparing parameters for legacy functions...")
-        
-        # 1. RVEVf
+
         rve_volume = part.getVolume()
-        target_vf = (target_volume / rve_volume) * 100.0  # 
-        
-        # 2. set
+        target_vf = (target_volume / rve_volume) * 100.0
+
         all_matrix_elements = set(matrix_element_labels)
         all_fiber_elements = set(fiber_element_labels)
-        
-        # 3. 
+
         elem_neighbors = element_neighbors_dict
         elem_volumes = element_volume_dict
         total_volume = rve_volume
-        
+
         # 4. matrix_elem_nodes and fiber_elem_nodes from pre-cached dict
         matrix_elem_nodes = {}
         for label in matrix_element_labels:
             matrix_elem_nodes[label] = element_nodes_dict.get(label, set())
-        
+
         fiber_elem_nodes = {}
         for label in fiber_element_labels:
             fiber_elem_nodes[label] = element_nodes_dict.get(label, set())
-        
-        print("  RVE volume: {:.6e}".format(rve_volume))
-        print("  Target Vf: {:.4f}%".format(target_vf))
-        print("  Matrix elements: {}".format(len(all_matrix_elements)))
-        print("  Fiber elements: {}".format(len(all_fiber_elements)))
-    
-    # ========== 5 ==========
-    
+
+
     if w_is_random and theta_is_random:
         # ========== 1: w=Random, theta=Random ==========
-        print(">>> Routing to CASE 1: Random w + Random theta")
         void_set, statistics = generate_voids_random_w_random_theta(
             target_vf, all_matrix_elements, all_fiber_elements,
             elem_neighbors, elem_volumes, total_volume,
             matrix_elem_nodes, fiber_elem_nodes)
-        
-        # 
-        print("\nConverting to unified format...")
+
         all_voids = []
-        
-        # statisticsclusters
+
         if 'clusters_with_type' in statistics:
             for cluster_info in statistics['clusters_with_type']:
                 element_list = list(cluster_info['cluster'])
-                
+
                 void_info = {
                     'elements': element_list,
                     'type': cluster_info['type'],
                     'volume': cluster_info['volume'],
-                    'centroid': np.array([0.0, 0.0, 0.0])  # 
+                    'centroid': np.array([0.0, 0.0, 0.0])
                 }
-                # 
                 if void_info['elements']:
                     centroid_list = []
                     for e in void_info['elements']:
                         centroid_list.append(element_centroid_dict[e])
                     void_info['centroid'] = np.mean(centroid_list, axis=0)
-                
+
                 all_voids.append(void_info)
-        
-        print("  Converted {} clusters to void_info format".format(len(all_voids)))
+
         return all_voids, statistics
-    
+
     elif not w_is_random and theta_is_random:
         # ========== 2: w=Custom, theta=Random ==========
-        print(">>> Routing to CASE 2: Custom w + Random theta")
         target_w = target_near_ratio if target_near_ratio is not None else void_distribution_value
         void_set, statistics = generate_voids_custom_w_random_theta(
             target_vf, target_w, all_matrix_elements, all_fiber_elements,
             elem_neighbors, elem_volumes, total_volume,
             matrix_elem_nodes, fiber_elem_nodes)
-        
-        # 
-        print("\nConverting to unified format...")
+
         all_voids = []
-        
-        # statisticsclusters
+
         if 'clusters_with_type' in statistics:
             for cluster_info in statistics['clusters_with_type']:
                 element_list = list(cluster_info['cluster'])
-                
+
                 void_info = {
                     'elements': element_list,
                     'type': cluster_info['type'],
                     'volume': cluster_info['volume'],
-                    'centroid': np.array([0.0, 0.0, 0.0])  # 
+                    'centroid': np.array([0.0, 0.0, 0.0])
                 }
-                # 
                 if void_info['elements']:
                     centroid_list = []
                     for e in void_info['elements']:
                         centroid_list.append(element_centroid_dict[e])
                     void_info['centroid'] = np.mean(centroid_list, axis=0)
-                
+
                 all_voids.append(void_info)
-        
-        print("  Converted {} clusters to void_info format".format(len(all_voids)))
+
         return all_voids, statistics
-    
+
     elif w_is_random and not theta_is_random:
         # ========== 3: w=Random, theta=Custom ==========
-        print(">>> Routing to CASE 3: Random w + Custom theta")
         return generate_voids_random_w_custom_theta(
             part, matrix_element_labels, near_fiber_candidates, inter_matrix_candidates,
             element_volume_dict, element_centroid_dict, element_neighbors_dict,
             fiber_nodes, target_volume, num_voids, target_elements_per_void,
             void_theta_value, avg_element_volume, fiber_element_labels, element_nodes_dict)
-    
+
     else:
         # both w and theta are Custom — unified Case 4
-        print(">>> Routing to CASE 4: Custom w + Custom theta")
         return generate_voids_custom_w_custom_theta(
             part, matrix_element_labels, near_fiber_candidates, inter_matrix_candidates,
             element_volume_dict, element_centroid_dict, element_neighbors_dict,
@@ -6164,50 +6117,43 @@ def select_seed_type(target_near_ratio, target_near_voids, target_inter_voids,
                      available_near_fiber, available_inter_matrix,
                      void_priority, current_volume, target_volume,
                      void_distribution_method, void_distribution_value,
-                     current_near_volume=0.0, current_inter_volume=0.0):  # ← 
+                     current_near_volume=0.0, current_inter_volume=0.0):  # ←
     """
-    
+
     """
-    # ==========  ==========
     if target_near_ratio is not None:
         if target_near_ratio == 0.0:
             return 'inter_matrix' if available_inter_matrix else None
         elif target_near_ratio == 1.0:
             return 'near_fiber' if available_near_fiber else None
-    
-    # ==========  ==========
+
     total_void_volume = current_near_volume + current_inter_volume
     current_ratio = current_near_volume / total_void_volume if total_void_volume > 0 else 0.0
-    
-    # ==========  ==========
+
     if void_priority == 1:  # w
         deviation = current_ratio - target_near_ratio
-        
-        # ±0.5%
+
         if deviation < -0.005:
             return 'near_fiber' if available_near_fiber else ('inter_matrix' if available_inter_matrix else None)
         elif deviation > 0.005:
             return 'inter_matrix' if available_inter_matrix else ('near_fiber' if available_near_fiber else None)
         else:
-            # ±0.5%
             if available_near_fiber and available_inter_matrix:
                 return 'near_fiber' if random.random() < target_near_ratio else 'inter_matrix'
             return 'near_fiber' if available_near_fiber else ('inter_matrix' if available_inter_matrix else None)
     elif void_priority == 2:
-        # 
         if available_near_fiber and available_inter_matrix:
             return random.choice(['near_fiber', 'inter_matrix'])
         return 'near_fiber' if available_near_fiber else 'inter_matrix'
-    
-    else:  # void_priority == 3 
-        # 
+
+    else:  # void_priority == 3
         if available_near_fiber and available_inter_matrix:
             return random.choice(['near_fiber', 'inter_matrix'])
         return 'near_fiber' if available_near_fiber else (
             'inter_matrix' if available_inter_matrix else None)
 
 # ---------------------------------------------------------------------------
-# Void shape factor (beta) helpers -- Phase 4 Step 1
+# Void shape factor (beta) helpers
 # ---------------------------------------------------------------------------
 # Module-level context used by the growth functions so we do not need to
 # thread beta-related kwargs through every helper. set_active_void_beta_ctx()
@@ -6294,7 +6240,7 @@ def _resolve_void_rotation(orientation_mode, beta):
 def beta_weighted_selection(candidates, seed_centroid, element_centroid_dict,
                             rotation_matrix, envelope_axes):
     """
-    Same purpose as distance_weighted_selection_debug, but distances are
+    Same purpose as distance_weighted_selection, but distances are
     measured in the local frame of an ellipsoid envelope. The envelope axes
     (a, b, c) come from the beta shape factor; the rotation matrix orients
     the envelope (random SO(3) or axis-aligned).
@@ -6315,7 +6261,7 @@ def beta_weighted_selection(candidates, seed_centroid, element_centroid_dict,
     for label in candidates:
         centroid = np.array(element_centroid_dict[label], dtype=float)
         # Express the offset in the local frame of the envelope.
-        local = R.T.dot(centroid - seed_centroid)
+        local = R.T.dot(_min_image(centroid - seed_centroid))
         scaled = local * inv_axes
         d = np.linalg.norm(scaled)
         metric.append(d)
@@ -6329,42 +6275,31 @@ def beta_weighted_selection(candidates, seed_centroid, element_centroid_dict,
     return candidates[selected_idx]
 
 
-def distance_weighted_selection_debug(candidates, seed_centroid, element_centroid_dict):
-    """
-     ()
-    """
-    
+def distance_weighted_selection(candidates, seed_centroid, element_centroid_dict):
+    """Pick one candidate element with probability inversely proportional to
+    its distance from the seed centroid."""
+
     if not candidates:
         return None
-    
-    distances = []
-    for i, label in enumerate(candidates):
-        centroid = element_centroid_dict[label]
-        
-        # numpy
-        if not isinstance(seed_centroid, np.ndarray):
-            seed_centroid = np.array(seed_centroid)
-        if not isinstance(centroid, np.ndarray):
-            centroid = np.array(centroid)
-        
-        dist = np.linalg.norm(centroid - seed_centroid)
-        distances.append(dist)
-    
-    distances = np.array(distances)
+
+    seed_centroid = np.asarray(seed_centroid, dtype=float)
+    centroids = np.array([element_centroid_dict[label] for label in candidates], dtype=float)
+    diff = _min_image(centroids - seed_centroid)
+    distances = np.sqrt((diff * diff).sum(axis=1))
     distances = np.maximum(distances, 1e-10)
-    
+
     weights = 1.0 / distances
     weights = weights / np.sum(weights)
-    
+
     selected_idx = np.random.choice(len(candidates), p=weights)
-    
+
     return candidates[selected_idx]
 
 
 ###################################################
 
 # ---------------------------------------------------------------------------
-# Per-void PCA envelope + fiber-surface destruction metrics -- Phase 4 Step 1
+# Per-void PCA envelope + fiber-surface destruction metrics
 # ---------------------------------------------------------------------------
 def compute_void_envelope(element_labels, element_centroid_dict):
     """
@@ -6419,22 +6354,27 @@ def _gini_coefficient(values):
     cum = np.cumsum(arr)
     return float((n + 1 - 2.0 * np.sum(cum) / s) / n)
 
+def _hex_face_index_sets(n_nodes):
+    if n_nodes == 8:
+        return ((0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4),
+                (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
+    if n_nodes == 6:
+        return ((0, 1, 2), (3, 4, 5), (0, 1, 4, 3), (1, 2, 5, 4), (2, 0, 3, 5))
+    if n_nodes == 4:
+        return ((0, 1, 2), (0, 1, 3), (1, 2, 3), (0, 2, 3))
+    return ()
 
 def compute_fiber_surface_destruction(part, all_voids, fiber_coords,
                                       element_nodes_dict, rve_a, rve_b,
-                                      fiber_radius=None):
+                                      fiber_radius=None, mesh_cache=None):
     """
-    Estimate per-fiber surface destruction using a node-count proxy:
-      * For each fiber center (y0, z0) in 2D (the 3D Y-axis is the fiber
-        axis in this RVE; (-Z, Y) are the in-plane coords used elsewhere
-        but here we keep the 3D coords directly), find all nodes whose
-        in-plane (Y, Z) distance to the fiber axis lies in a thin annulus
-        around the fiber radius -- these are "interface nodes".
-      * "Broken interface nodes" are interface nodes that belong to at
-        least one void element.
+    Face-based fiber-surface destruction metrics.
 
+    interface face : element face shared by one fiber element and one
+                     non-fiber element (matrix or void)
+    broken face    : interface face whose non-fiber element is a void element
     Returns:
-        per_fiber: list of dicts {fiber_id, perimeter (proxy = N_i),
+        per_fiber: list of dicts {fiber_id, perimeter (= N_i faces),
                                   area_total (= N_i), area_broken (= B_i),
                                   ratio (= B_i / N_i)}
         metrics:   dict with keys f_fiber, f_area, r_avg_broken, C_focus, Gini
@@ -6450,81 +6390,90 @@ def compute_fiber_surface_destruction(part, all_voids, fiber_coords,
     if not fiber_coords:
         return per_fiber, metrics
 
-    # Collect node coords once.
-    node_xyz = {}
-    for n in part.nodes:
-        node_xyz[n.label] = np.array(n.coordinates)
-
-    # Build the set of nodes belonging to ANY void.
-    void_node_set = set()
+    # ---- element classification --------------------------------------------
+    fiber_labels = set([e.label for e in part.sets['Set-Fiber-element'].elements])
+    void_labels = set()
     for v in all_voids:
         for lbl in v.get('elements', []):
-            void_node_set |= element_nodes_dict.get(lbl, set())
+            void_labels.add(lbl)
 
-    # Pick a tolerance: half a typical element edge, or 2% of in-plane span.
-    tol = 0.02 * max(rve_a, rve_b)
-    if fiber_radius is not None and fiber_radius > 0:
-        # Tighter band when the radius is known.
-        tol = max(tol, 0.05 * fiber_radius)
+    # ---- node coordinates and connectivity -----------------------------------
+    # Reuse the mesh read by the caller when available; otherwise read it here
+    # (node_xyz is indexed by node index, matching element.connectivity).
+    if mesh_cache is not None:
+        node_xyz = mesh_cache['node_xyz']
+        label_to_index = dict((lbl, i) for i, lbl in enumerate(mesh_cache['node_index_to_label']))
+        element_items = [(lbl, tuple([label_to_index[nl] for nl in node_labels]))
+                         for lbl, node_labels in mesh_cache['element_node_labels'].items()]
+    else:
+        node_xyz = np.array([n.coordinates for n in part.nodes])
+        element_items = [(e.label, e.connectivity) for e in part.elements]
 
-    # fiber_coords here are 2D (x, y) where x = -Z, y = Y (per
-    # convert_3d_to_2d_coordinates). Convert each fiber center back to
-    # (Y, Z) so we can compare with node coords directly.
-    sorted_node_labels = list(node_xyz.keys())
-    node_arr = np.array([node_xyz[k] for k in sorted_node_labels])  # N x 3
+    # ---- face -> owner elements ---------------------------------------------
+    face_owner = {}
+    for e_label, conn in element_items:
+        for idx in _hex_face_index_sets(len(conn)):
+            key = frozenset([conn[i] for i in idx])
+            if key in face_owner:
+                face_owner[key].append(e_label)
+            else:
+                face_owner[key] = [e_label]
+
+    # ---- fiber centres in (Y, Z) of the 3D part ----------------------------
+    # fiber_coords are 2D (x, y) with x = -Z, y = Y (convert_3d_to_2d_coordinates)
+    fc = np.array([[fy, -fx] for (fx, fy) in fiber_coords])   # columns: Y, Z
+
+    n_fib = len(fiber_coords)
+    N = np.zeros(n_fib, dtype=int)
+    B = np.zeros(n_fib, dtype=int)
+
+    for key, owners in face_owner.items():
+        if len(owners) != 2:
+            continue
+        a, b = owners
+        fa = a in fiber_labels
+        fb = b in fiber_labels
+        if fa == fb:
+            continue                      # fiber-fiber or matrix-matrix face
+        other = b if fa else a
+        # centroid of the face -> nearest fiber axis in the (Y, Z) plane
+        pts = node_xyz[list(key)]
+        cy = pts[:, 1].mean()
+        cz = pts[:, 2].mean()
+        d2 = (fc[:, 0] - cy) ** 2 + (fc[:, 1] - cz) ** 2
+        # periodic images: fibers cut by the RVE boundary have their centre on
+        # the opposite side; check the shifted copies as well
+        for sy in (-rve_a, 0.0, rve_a):
+            for sz in (-rve_b, 0.0, rve_b):
+                if sy == 0.0 and sz == 0.0:
+                    continue
+                d2 = np.minimum(d2, (fc[:, 0] + sy - cy) ** 2 + (fc[:, 1] + sz - cz) ** 2)
+        f_idx = int(np.argmin(d2))
+        N[f_idx] += 1
+        if other in void_labels:
+            B[f_idx] += 1
 
     r_values = []
-    for f_idx, (fx, fy) in enumerate(fiber_coords):
-        # x = -Z  =>  Z = -fx ; y = Y
-        z0 = -fx
-        y0 = fy
-        # In-plane (Y, Z) distance from each node to the fiber axis.
-        dy = node_arr[:, 1] - y0
-        dz = node_arr[:, 2] - z0
-        dist = np.sqrt(dy * dy + dz * dz)
-
-        if fiber_radius is not None and fiber_radius > 0:
-            mask = np.abs(dist - fiber_radius) <= tol
-        else:
-            # Treat the first quartile of distances as the interface band.
-            mask = dist <= np.percentile(dist, 5)
-
-        interface_labels = [sorted_node_labels[i] for i, m in enumerate(mask) if m]
-        if not interface_labels:
-            per_fiber.append({
-                'fiber_id'   : f_idx + 1,
-                'perimeter'  : 0,
-                'area_total' : 0,
-                'area_broken': 0,
-                'ratio'      : 0.0,
-            })
-            r_values.append(0.0)
-            continue
-        Ni = len(interface_labels)
-        Bi = len([lbl for lbl in interface_labels if lbl in void_node_set])
-        ri = float(Bi) / float(Ni)
+    for i in range(n_fib):
+        ri = float(B[i]) / float(N[i]) if N[i] > 0 else 0.0
         per_fiber.append({
-            'fiber_id'   : f_idx + 1,
-            'perimeter'  : Ni,
-            'area_total' : Ni,
-            'area_broken': Bi,
+            'fiber_id'   : i + 1,
+            'perimeter'  : int(N[i]),
+            'area_total' : int(N[i]),
+            'area_broken': int(B[i]),
             'ratio'      : ri,
         })
         r_values.append(ri)
 
-    Nf = len(per_fiber)
-    if Nf == 0:
-        return per_fiber, metrics
-
     affected = [r for r in r_values if r > 0]
-    sum_total  = float(sum([pf['area_total'] for pf in per_fiber]))
-    sum_broken = float(sum([pf['area_broken'] for pf in per_fiber]))
+    sum_total = float(N.sum())
+    sum_broken = float(B.sum())
 
-    metrics['f_fiber']      = float(len(affected)) / float(Nf)
+    metrics['f_fiber']      = float(len(affected)) / float(n_fib) if n_fib else 0.0
     metrics['f_area']       = (sum_broken / sum_total) if sum_total > 0 else 0.0
     metrics['r_avg_broken'] = (float(np.mean(affected)) if affected else 0.0)
     metrics['C_focus']      = (metrics['r_avg_broken'] / metrics['f_area']) if metrics['f_area'] > 0 else 0.0
-    metrics['Gini']         = _gini_coefficient(r_values)
+    metrics['Gini']         = _gini_coefficient(r_values)   # existing helper in the plugin
 
     return per_fiber, metrics
 
@@ -6536,49 +6485,47 @@ def output_void_statistics(model_name, part, all_voids, void_statistics,
                           void_distribution_method, void_distribution_value,
                           void_size_method, void_theta_value, void_priority,
                           fiber_coords, element_nodes_dict=None,
-                          fiber_radius=None):
+                          fiber_radius=None, mesh_cache=None):
     """
     Write the void statistics report and accompanying CSV outputs.
     The optional element_nodes_dict and fiber_radius arguments enable the
-    fiber-surface destruction metrics (Phase 4 Step 1).
+    fiber-surface destruction metrics.
     """
-    
-    # 
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    folder_name = "Void_Statistics_{}_{}".format(model_name, timestamp)
+
+    # One folder per model, without a timestamp: re-running void insertion on
+    # the same model refreshes the files in place instead of leaving a trail of
+    # stale folders.
+    folder_name = "Void_Statistics_{}".format(model_name)
     work_dir = os.getcwd()
     output_folder = os.path.join(work_dir, folder_name)
-    
+
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-    
-    # ==========  ==========
+
     volumes_list = []
     centroids_list = []
     for v in all_voids:
         volumes_list.append(v['volume'])
         centroids_list.append(v['centroid'])
-    
+
     volumes = np.array(volumes_list)
     centroids = np.array(centroids_list)
-    
+
     total_void_volume = 0.0
     for vol in volumes_list:
         total_void_volume += vol
     realized_vf = total_void_volume / rve_volume * 100
-    
-    # 
+
     mean_volume = np.mean(volumes) if len(volumes) > 0 else 0
     std_volume = np.std(volumes) if len(volumes) > 0 else 0
     min_volume = np.min(volumes) if len(volumes) > 0 else 0
     max_volume = np.max(volumes) if len(volumes) > 0 else 0
-    
-    # 
+
     num_near_fiber = 0
     num_inter_matrix = 0
     near_fiber_volume = 0.0
     inter_matrix_volume = 0.0
-    
+
     for v in all_voids:
         if v['type'] == 'near_fiber':
             num_near_fiber += 1
@@ -6586,98 +6533,90 @@ def output_void_statistics(model_name, part, all_voids, void_statistics,
         else:
             num_inter_matrix += 1
             inter_matrix_volume += v['volume']
-    
-    # ==========  ==========
+
     near_fiber_vf = realized_vf * (near_fiber_volume / max(total_void_volume, 1e-20))
     inter_matrix_vf = realized_vf * (inter_matrix_volume / max(total_void_volume, 1e-20))
-    
-    # ==========  ==========
-    # 
+
     if void_distribution_method == 1:
         distribution_method_str = "Random"
         distribution_value_str = "N/A (Random)"
     else:
         distribution_method_str = "Custom"
         distribution_value_str = "{:.2f} (0=all inter-matrix, 1=all near-fiber)".format(void_distribution_value)
-    
-    # 
+
     if void_size_method == 1:
         size_method_str = "Random"
         size_value_str = "N/A (Random)"
     else:
         size_method_str = "Custom (theta)"
         size_value_str = "{} voids".format(void_theta_value)
-    
-    # 
+
     if void_priority == 1:
         priority_str = "Distribution Priority (strict w)"
     elif void_priority == 2:
         priority_str = "Size Priority (allow w deviation)"
     else:
         priority_str = "No Intervention"
-    
-    # ========== 1.  ==========
+
     report_file = os.path.join(output_folder, "void_summary_report.txt")
-    
+
     with open(report_file, 'w') as f:
         f.write("=" * 70 + "\n")
         f.write("            MICRO-VOID INSERTION SUMMARY REPORT\n")
         f.write("=" * 70 + "\n\n")
         f.write("Model: {}\n".format(model_name))
         f.write("Generated: {}\n\n".format(time.strftime("%Y-%m-%d %H:%M:%S")))
-        
+
         f.write("-" * 70 + "\n")
         f.write("USER INPUT PARAMETERS\n")
         f.write("-" * 70 + "\n")
-        f.write("  Target Void Vf:           {:.4f}%\n".format(target_vf * 100))
+        f.write("  Target Vvoid:             {:.4f}%\n".format(target_vf * 100))
         f.write("  Distribution Method:      {}\n".format(distribution_method_str))
         f.write("  Distribution Value (w):   {}\n".format(distribution_value_str))
         f.write("  Size Method:              {}\n".format(size_method_str))
         f.write("  Size Value (theta):       {}\n".format(size_value_str))
         f.write("  Priority Setting:         {}\n\n".format(priority_str))
-        
+
         f.write("-" * 70 + "\n")
         f.write("RVE DIMENSIONS\n")
         f.write("-" * 70 + "\n")
         f.write("  RVE size (a x b x c): {:.4f} x {:.4f} x {:.4f}\n".format(rve_a, rve_b, rve_c))
         f.write("  RVE Volume:           {:.6e}\n\n".format(rve_volume))
-        
+
         f.write("-" * 70 + "\n")
         f.write("VOLUME FRACTION RESULTS\n")
         f.write("-" * 70 + "\n")
-        f.write("  Target Void Vf:     {:.4f}%\n".format(target_vf * 100))
-        f.write("  Realized Void Vf:   {:.4f}%\n".format(realized_vf))
+        f.write("  Target Vvoid:       {:.4f}%\n".format(target_vf * 100))
+        f.write("  Realized Vvoid:     {:.4f}%\n".format(realized_vf))
         f.write("  Total Void Volume:  {:.6e}\n".format(total_void_volume))
         f.write("  Deviation:          {:.4f}%\n\n".format(abs(realized_vf - target_vf * 100)))
-        
+
         # ========== 1VOID COUNT AND SIZE  ==========
         f.write("-" * 70 + "\n")
         f.write("VOID COUNT AND SIZE (θ)\n")
         f.write("-" * 70 + "\n")
         f.write("  Target number:      {}\n".format(
             void_theta_value if void_size_method == 2 else "N/A (volume-based)"))
-        
-        # num_voidsnum_valid_voids
+
         num_voids = void_statistics.get('num_voids', len(all_voids))
         num_valid_voids = void_statistics.get('num_valid_voids', num_voids)
-        
+
         f.write("  Actual voids (physically disconnected): {}\n".format(num_valid_voids))
 
         if num_valid_voids < num_voids:
             f.write("  WARNING: {} voids became empty during post-processing\n".format(
                 num_voids - num_valid_voids))
-        
-        # ==========  ==========
+
         f.write("  Near-fiber voids (count):   {} ({:.2f}%)\n".format(
             num_near_fiber, num_near_fiber / max(len(all_voids), 1) * 100))
         f.write("  Inter-matrix voids (count): {} ({:.2f}%)\n".format(
             num_inter_matrix, num_inter_matrix / max(len(all_voids), 1) * 100))
-        
+
         f.write("  Mean Volume:        {:.6e}\n".format(mean_volume))
         f.write("  Std Volume:         {:.6e}\n".format(std_volume))
         f.write("  Min Volume:         {:.6e}\n".format(min_volume))
         f.write("  Max Volume:         {:.6e}\n\n".format(max_volume))
-        
+
         # ========== 2VOID DISTRIBUTION RESULTS  ==========
         f.write("-" * 70 + "\n")
         f.write("VOID DISTRIBUTION RESULTS (w)\n")
@@ -6686,8 +6625,7 @@ def output_void_statistics(model_name, part, all_voids, void_statistics,
         f.write("  Inter-matrix volume:        {:.6e}\n".format(inter_matrix_volume))
         f.write("  Near-fiber volume fraction:     {:.4f}%\n".format(near_fiber_vf))
         f.write("  Inter-matrix volume fraction:   {:.4f}%\n".format(inter_matrix_vf))
-        
-        # ========== w==========
+
         actual_w = near_fiber_volume / max(total_void_volume, 1e-20)
         f.write("  Actual w value:             {:.4f} (volume-based)\n".format(actual_w))
         if void_distribution_method == 2:
@@ -6695,13 +6633,13 @@ def output_void_statistics(model_name, part, all_voids, void_statistics,
             f.write("  w Deviation:                {:.4f}\n".format(abs(actual_w - void_distribution_value)))
         else:
             f.write("  Target w value:             /\n")
-        
+
         f.write("\n" + "=" * 70 + "\n")
         f.write("Note: All spatial statistics computed with periodic boundary conditions.\n")
         f.write("      w value is defined as (near-fiber void volume) / (total void volume).\n")
         f.write("Output folder: {}\n".format(output_folder))
 
-    
+
     # ========== 2. void_sizes.csv (extended with PCA envelope) ==========
     size_file = os.path.join(output_folder, "void_sizes.csv")
     with open(size_file, 'w') as f:
@@ -6739,7 +6677,7 @@ def output_void_statistics(model_name, part, all_voids, void_statistics,
         try:
             per_fiber, fs_metrics = compute_fiber_surface_destruction(
                 part, all_voids, fiber_coords, element_nodes_dict,
-                rve_a, rve_b, fiber_radius=fiber_radius)
+                rve_a, rve_b, fiber_radius=fiber_radius, mesh_cache=mesh_cache)
         except Exception as _exc:
             print("  [warn] Fiber-surface destruction metrics failed: {}".format(_exc))
             per_fiber, fs_metrics = [], {
@@ -6770,97 +6708,70 @@ def output_void_statistics(model_name, part, all_voids, void_statistics,
         except Exception as _exc:
             print("  [warn] Could not append fiber-surface metrics to report: {}".format(_exc))
 
-    # ========== 3. ==========
     if len(all_voids) >= 2:
         nn1_distances, nn2_distances = calculate_void_nn_distances_periodic(
             centroids, rve_a, rve_b, rve_c)
-        # NN
         nn_file = os.path.join(output_folder, "void_nn_distances.csv")
         with open(nn_file, 'w') as f:
             f.write("Void_ID,NN1_Distance,NN2_Distance\n")
             for i in range(len(all_voids)):
                 f.write("{},{:.6f},{:.6f}\n".format(i + 1, nn1_distances[i], nn2_distances[i]))
 
-        # Ripley's Kg(r)
         if len(all_voids) >= 3:
             r_ripley, K_values, K_random = calculate_ripleys_k_void_periodic(
                 centroids, rve_a, rve_b, rve_c)
-            
+
             r_pdf, g_values = calculate_void_pdf_periodic(
                 centroids, rve_a, rve_b, rve_c)
-            
-            # Ripley's K
+
             ripley_file = os.path.join(output_folder, "void_ripleys_k.csv")
             with open(ripley_file, 'w') as f:
                 f.write("r_distance,K_observed,K_random\n")
                 for r, k, kr in zip(r_ripley, K_values, K_random):
                     f.write("{:.6f},{:.6f},{:.6f}\n".format(r, k, kr))
-            
-            # g(r)
+
             pdf_file = os.path.join(output_folder, "void_pair_distribution.csv")
             with open(pdf_file, 'w') as f:
                 f.write("r_distance,g_r\n")
                 for r, g in zip(r_pdf, g_values):
                     f.write("{:.6f},{:.6f}\n".format(r, g))
-    
-    # ========== 4. -==========
+
     if fiber_coords:
         fiber_surface_distances = calculate_void_fiber_distances_periodic(
             all_voids, fiber_coords, rve_a, rve_b)
-        
-        # 
+
         fiber_dist_file = os.path.join(output_folder, "void_fiber_distances.csv")
         with open(fiber_dist_file, 'w') as f:
             f.write("Void_ID,NN1_to_Fiber,NN2_to_Fiber\n")
             for i, (d1, d2) in enumerate(fiber_surface_distances):
                 f.write("{},{:.6f},{:.6f}\n".format(i + 1, d1, d2))
-    
-    # 
-    print("\n" + "=" * 70)
-    print("VOID STATISTICS SUMMARY (Periodic Boundary)")
-    print("=" * 70)
-    print("  RVE size:                {:.4f} x {:.4f} x {:.4f}".format(rve_a, rve_b, rve_c))
-    print("  Number of voids:         {}".format(len(all_voids)))
-    print("  Near-fiber (count):      {} ({:.2f}%)".format(
-        num_near_fiber, num_near_fiber / max(len(all_voids), 1) * 100))
-    print("  Inter-matrix (count):    {} ({:.2f}%)".format(
-        num_inter_matrix, num_inter_matrix / max(len(all_voids), 1) * 100))
-    print("  Mean void volume:        {:.6e}".format(mean_volume))
-    print("  Volume std dev:          {:.6e}".format(std_volume))
-    print("  Realized Vf:             {:.4f}%".format(realized_vf))
-    print("  Near-fiber Vf:           {:.4f}%".format(near_fiber_vf))
-    print("  Inter-matrix Vf:         {:.4f}%".format(inter_matrix_vf))
-    print("  Actual w value:          {:.4f} (volume-based)".format(actual_w))
-    print("  Output folder:           {}".format(output_folder))
-    print("=" * 70 + "\n")
+
 
 
 def convert_3d_to_2d_coordinates(node_coords_3d):
     """
     3D2D
-    
+
     y90
      (x, y) ->  (x, y, z) ->  (z, y, -x)
-    
+
     3D (X, Y, Z)  2D  (x, y) = (-Z, Y)
-    
+
     Args:
         node_coords_3d: 3D [X, Y, Z]  [[X1, Y1, Z1], [X2, Y2, Z2], ...]
-    
+
     Returns:
         coords_2d: 2D [x, y]  [[x1, y1], [x2, y2], ...]
     """
     import numpy as np
-    
+
     coords_array = np.array(node_coords_3d)
-    
-    # 
+
     if coords_array.ndim == 1:
         x_2d = -coords_array[2]  # -Z
         y_2d = coords_array[1]   # Y
         return [x_2d, y_2d]
-    
-    # 
+
     else:
         x_2d = -coords_array[:, 2]  # -Z
         y_2d = coords_array[:, 1]   # Y
@@ -6869,252 +6780,223 @@ def convert_3d_to_2d_coordinates(node_coords_3d):
 def extract_fiber_centers(part, model_name=None, work_dir=None, rve_a=None, rve_b=None):
     """
     CSVCSV
-    
+
     Args:
         part: Abaqus part
-        model_name: 
-        work_dir: 
+        model_name:
+        work_dir:
         rve_a, rve_b: RVE
-    
+
     Returns:
         fiber_coords:  [[x, y], ...]2D
     """
-    print("\n========== FIBER CENTER EXTRACTION (CSV Only) ==========")
-    
+
     if not model_name or not work_dir:
         raise ValueError("ERROR: model_name and work_dir are required for CSV extraction")
-    
-    # CSV
+
     csv_path = find_fiber_coordinates_csv(model_name, work_dir)
-    
+
     if not csv_path:
         raise ValueError("ERROR: Cannot find CSV file for model: {}".format(model_name))
-    
-    # CSV
+
     fiber_coords = read_fiber_coordinates_from_csv(csv_path)
-    
+
     if not fiber_coords:
         raise ValueError("ERROR: Failed to read coordinates from CSV: {}".format(csv_path))
-    
-    print("  Total fibers from CSV: {}".format(len(fiber_coords)))
-    print("  Coordinate system: Original 2D (x, y)")
-    print("=" * 60 + "\n")
-    
+
+
     return fiber_coords
 
 def calculate_void_nn_distances_periodic(centroids, a, b, c):
-    """
-    
-    
-    """
+    """First and second nearest-neighbour distances between void centroids under
+    periodic boundary conditions in the a x b x c box."""
     import numpy as np
     n = len(centroids)
-    
-    # volumes
-    
+
+
     nn1_distances = []
     nn2_distances = []
-    
+
     for i in range(n):
         distances = []
         for j in range(n):
             if i != j:
-                # 
                 center_dist = calculate_periodic_distance_3d(centroids[i], centroids[j], a, b, c)
                 distances.append(center_dist)
-        
+
         distances.sort()
         nn1_distances.append(distances[0] if len(distances) > 0 else 0)
         nn2_distances.append(distances[1] if len(distances) > 1 else 0)
-    
+
     return nn1_distances, nn2_distances
 
-def calculate_ripleys_k_void_periodic(centroids, a, b, c, 
+def calculate_ripleys_k_void_periodic(centroids, a, b, c,
                                       max_r_value=None, num_points=100):
-    """
-    Ripley's K
-    
-    """
+    """Ripley's K function of the void centroids under periodic boundary
+    conditions, with the Poisson reference K_random."""
     import numpy as np
     n = len(centroids)
     volume = a * b * c
     intensity = n / volume
-    
-    # ✅ volumes
-    
-    # ✅ 
+
+
     all_center_distances = []
     for i in range(n):
         for j in range(i+1, n):
             center_dist = calculate_periodic_distance_3d(centroids[i], centroids[j], a, b, c)
             all_center_distances.append(center_dist)
-    
+
     if not all_center_distances:
         return [], [], []
-    
+
     if max_r_value is None:
         max_r_value = max(all_center_distances) * 1.5
-    
+
     r_values = np.linspace(0, max_r_value, num_points)
     K_values = []
-    
+
     for r in r_values:
         if r == 0:
             K_values.append(0)
             continue
-        
+
         count = 0
         for d in all_center_distances:
             if d < r:
                 count += 1
         count = count * 2
-        
+
         K = count / (n * intensity) if n * intensity > 0 else 0
         K_values.append(K)
-    
-    # 3D
+
     #K_random = [(4.0/3.0) * np.pi * r**3 for r in r_values]
-    # 2D
     K_random = [np.pi * r**2 for r in r_values]
-    
+
     return r_values, K_values, K_random
 
-def calculate_void_pdf_periodic(centroids, a, b, c, 
+def calculate_void_pdf_periodic(centroids, a, b, c,
                                 max_r_value=None, num_bins=100):
-    """
-     g(r)3D
-    
-    """
+    """Pair distribution function g(r) of the void centroids in 3D under periodic
+    boundary conditions."""
     import numpy as np
     n = len(centroids)
     volume = a * b * c
     intensity = n / volume
-    
-    # volumes
-    
-    # 
+
+
     all_center_distances = []
     for i in range(n):
         for j in range(i+1, n):
             center_dist = calculate_periodic_distance_3d(centroids[i], centroids[j], a, b, c)
             all_center_distances.append(center_dist)
-    
+
     if not all_center_distances:
         return [], []
-    
+
     if max_r_value is None:
         max_r_value = max(all_center_distances) * 1.2
-    
+
     r_values = np.linspace(0, max_r_value, num_bins)
     g_values = []
     dr = r_values[1] - r_values[0] if len(r_values) > 1 else 1.0
-    
+
     for r in r_values:
         if r == 0:
             g_values.append(0)
             continue
-        
+
         shell_volume = 4 * np.pi * r**2 * dr
         expected_count = intensity * shell_volume * n
-        
+
         if expected_count == 0:
             g_values.append(0)
             continue
-        
+
         actual_count = 0
         for d in all_center_distances:
             if r - dr/2 < d < r + dr/2:
                 actual_count += 1
         actual_count = actual_count * 2
-        
+
         g = actual_count / expected_count if expected_count > 0 else 0
         g_values.append(g)
-    
+
     return r_values, g_values
 
 
 def find_fiber_coordinates_csv(model_name, work_dir):
     """
     CSV
-    
+
     Args:
         model_name:  'RVE_UDFiber_Random_Df7_Vf060_N70_Model_1'
-        work_dir: 
-    
+        work_dir:
+
     Returns:
         csv_path: CSVNone
     """
-    
-    # 
+
     model_number_match = re.search(r'_Model_(\d+)$', model_name)
     if not model_number_match:
         print("  WARNING: Cannot extract model number from: {}".format(model_name))
         return None
-    
+
     model_number = int(model_number_match.group(1))
-    model_number_str = "{:02d}".format(model_number)  # 
-    
-    print("  Model number: {} -> CSV suffix: {}".format(model_number, model_number_str))
-    
-    # 3
+    model_number_str = "{:02d}".format(model_number)
+
+
     search_dirs = [work_dir]
     current_dir = work_dir
-    
+
     for _ in range(3):
         parent_dir = os.path.dirname(current_dir)
         if parent_dir == current_dir:
             break
         search_dirs.append(parent_dir)
         current_dir = parent_dir
-    
-    # 
+
     for search_dir in search_dirs:
         folder_pattern = os.path.join(search_dir, "RVE_UDFibers*_Vf*_xy_*units")
         matching_folders = glob.glob(folder_pattern)
-        
+
         for folder in matching_folders:
             csv_pattern = os.path.join(folder, "*IncCoordinates{}.csv".format(model_number_str))
             matching_csvs = glob.glob(csv_pattern)
-            
+
             if matching_csvs:
                 csv_path = matching_csvs[0]
-                print("  Found CSV: {}".format(csv_path))
                 return csv_path
-    
+
     print("  WARNING: No CSV file found for model number {}".format(model_number_str))
     return None
 
 def read_fiber_coordinates_from_csv(csv_path):
     """
     CSV
-    
+
     Args:
         csv_path: CSV
-    
+
     Returns:
         coords:  [[x, y], [x, y], ...]None
     """
     import csv
-    
+
     coords = []
-    
+
     try:
         with open(csv_path, 'r') as f:
             csv_reader = csv.reader(f)
-            
-            # 
+
             first_row = next(csv_reader, None)
             if first_row:
-                # 
                 try:
                     x = float(first_row[0])
                     y = float(first_row[1])
                     coords.append([x, y])
                 except (ValueError, IndexError):
-                    # 
                     pass
-            
-            # 
+
             for row in csv_reader:
                 if len(row) >= 2:
                     try:
@@ -7123,10 +7005,9 @@ def read_fiber_coordinates_from_csv(csv_path):
                         coords.append([x, y])
                     except ValueError:
                         continue
-        
-        print("  Successfully read {} fiber coordinates from CSV".format(len(coords)))
+
         return coords
-    
+
     except Exception as e:
         print("  ERROR reading CSV file: {}".format(e))
         return None
@@ -7134,65 +7015,61 @@ def read_fiber_coordinates_from_csv(csv_path):
 def calculate_distance_to_fiber_axis_periodic(void_centroid_3d, fiber_center_2d, a, b):
     """
     void2D
-    
+
     Args:
         void_centroid_3d: void [X, Y, Z]3D
         fiber_center_2d:  [x, y]2DCSV
         a, b: RVEx, y2D
-    
+
     Returns:
         void2D
     """
     import numpy as np
-    
-    # ========== 3D2D ==========
+
     void_xy_2d = convert_3d_to_2d_coordinates(void_centroid_3d)
     void_xy = np.array(void_xy_2d)  # 2D
     fiber_xy = np.array(fiber_center_2d)  # CSV2D
-    
-    # 2D
+
     dx = abs(void_xy[0] - fiber_xy[0])
     dy = abs(void_xy[1] - fiber_xy[1])
-    
+
     dx = min(dx, a - dx)
     dy = min(dy, b - dy)
-    
-    # 2D
+
     distance = np.sqrt(dx**2 + dy**2)
-    
+
     return distance
 
 def calculate_void_fiber_distances_periodic(all_voids, fiber_coords, a, b):
     """
     2D
-    
+
     Args:
         all_voids:  {'centroid': [X, Y, Z], ...}3D
         fiber_coords:  [[x, y], ...]2DCSV
         a, b: RVEx, y2D
-    
+
     Returns:
         void_fiber_distances: [(NN1, NN2), ...] void
     """
-    
+
     void_fiber_distances = []
-    
+
     for void_info in all_voids:
         void_centroid_3d = void_info['centroid']  # 3D
-        
+
         distances = []
         for fiber_xy in fiber_coords:  # 2DCSV
-            # void
             dist = calculate_distance_to_fiber_axis_periodic(
                 void_centroid_3d, fiber_xy, a, b)
-            
+
             distances.append(dist)
-        
+
         distances.sort()
         nn1 = distances[0] if len(distances) > 0 else 0
         nn2 = distances[1] if len(distances) > 1 else 0
         void_fiber_distances.append((nn1, nn2))
-    
+
     return void_fiber_distances
 
 ###############################################################################
@@ -7483,18 +7360,6 @@ def _interface_faces_to_face_array(part, faces):
         raise ValueError("No valid fiber-matrix interface faces were found for cohesive insertion.")
     return face_array
 
-def _interface_make_bottom_nodes(part, top_nodes, max_original_label, tolerance=1.0e-7):
-    top_coord_keys = set()
-    for node in top_nodes:
-        top_coord_keys.add(tuple([round(float(value) / tolerance) for value in node.coordinates]))
-    bottom_labels = []
-    for node in part.nodes:
-        if node.label > max_original_label:
-            continue
-        key = tuple([round(float(value) / tolerance) for value in node.coordinates])
-        if key in top_coord_keys:
-            bottom_labels.append(node.label)
-    return bottom_labels
 
 def _interface_coord_key(coordinates, tolerance=1.0e-7):
     return tuple([round(float(value) / tolerance) for value in coordinates])
@@ -7846,7 +7711,10 @@ def _thermal_build_side_surface(p, node_label_set, surf_name, allowed_face_keys=
             if face_share.get(face_key, 0) != 1:
                 continue  # interior (shared) face -- skip, keep only free faces
             buckets.setdefault(fi, []).append(el.label)
-            break
+            # No break: an element can carry more than one interface face (a
+            # matrix element squeezed between two fibres, or in a concave corner
+            # of the fibre outline).  Keeping only the first face left part of
+            # the interface without a surface, i.e. effectively adiabatic.
     if not buckets:
         raise RuntimeError("Thermal interface: could not build surface '%s' "
             "(no solid faces matched the split-side nodes)." % surf_name)
@@ -8042,8 +7910,9 @@ def insert_thermal_seam(model_for_interface_thermal, part_for_interface,
     _diag = _math.sqrt((max(_xs) - min(_xs)) ** 2
                        + (max(_ys) - min(_ys)) ** 2
                        + (max(_zs) - min(_zs)) ** 2)
-    _c_full = 5.0e-3 * _diag      # conductance stays = h up to this clearance
-    _c_zero = 1.0e-2 * _diag      # conductance -> 0 beyond this clearance
+    _c_full = 1.0e-3      # conductance stays = h out to this clearance (model units)
+    _c_zero = 1.0e-2      # -> 0 beyond this; well below the 0.245 um minimum fibre gap,
+                          # so two different fibres can never conduct through the contact
 
     prop_name = 'ThermalSeam-1-GapConductance'
     if prop_name in model.interactionProperties.keys():
@@ -8099,20 +7968,6 @@ def insert_thermal_seam(model_for_interface_thermal, part_for_interface,
         'gap_conductance': gap_conductance,
     }
 
-
-def set_material_orientation_and_section_interface(model, interface_material):
-    p = model.parts['UDComposite']
-    region_interface = p.sets['CohesiveSeam-1-Elements']
-    model.CohesiveSection(name='Interface_Section', response=TRACTION_SEPARATION, material=interface_material, outOfPlaneThickness=None)
-    # Define material orientation
-    p.MaterialOrientation(region=region_interface, orientationType=GLOBAL, axis=AXIS_1, additionalRotationType=ROTATION_NONE, localCsys=None, fieldName='', stackDirection=STACK_3)
-    # Assign sections to interface
-    p.SectionAssignment(region=p.sets['CohesiveSeam-1-Elements'],sectionName='Interface_Section', offset=0.0, offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
-    # Force plain mechanical cohesive types (no pore-pressure P suffix).
-    p.setElementType(
-        regions=(p.sets['CohesiveSeam-1-Elements'].elements,),
-        elemTypes=(mesh.ElemType(elemCode=COH3D8, elemLibrary=STANDARD),
-                   mesh.ElemType(elemCode=COH3D6, elemLibrary=STANDARD)))
 
 # Extraction of material from selected models
 def export_materials_to_odb_interface(model_for_interface):
@@ -8226,12 +8081,6 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
         show_analysis_warning('Temperature Input Error', str(error_message))
         return
 
-    epTheta = float(kwargs.get('epTheta', 0.0) or 0.0)
-    if import_elastoplastic and (epTheta < -EPSILON or epTheta > (90.0 + EPSILON)):
-        show_analysis_warning('Elastoplastic Input Error', 'Off-axis angle must be between 0 and 90 degrees.')
-        return
-
-    keep_all_outputs = bool(kwargs.get('keepAbaqusOutputs', False))
     umatName = kwargs.get('umatName', '') or ''
 
     # --- Resolve target model list -------------------------------------------
@@ -8310,16 +8159,14 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
 
     # ----- helper: output directory ------------------------------------------
     def prepare_output_directory(model_name, analysis_name, case_label, temperature_value, sample_file_name):
-        if keep_all_outputs:
-            subdir_name = build_case_output_subdirectory(model_name, analysis_name, case_label, temperature_value, shared_timestamp)
-            ensure_output_path_is_safe(base_output_dir, subdir_name, sample_file_name)
-            return os.path.join(base_output_dir, subdir_name)
+        # All cases of one Analysis() click share base_output_dir. Job names carry
+        # the temperature tag, so ODBs of different temperature points never collide.
         ensure_output_path_is_safe(base_output_dir, '', sample_file_name)
         return None
 
     # Cache keyed by (model_name, case_label). Within a single Analysis() click,
     # all temperature points of the same load case share the same load sub-
-    # folder (so they can sit side-by-side as per-temperature sub-folders).
+    # folder; the temperature tag in the job / CSV names keeps them apart.
     # Across runs, the load sub-folder gets a "(1)", "(2)", ... suffix when
     # the un-suffixed name already exists on disk, so previous results are
     # never silently overwritten.
@@ -8360,13 +8207,6 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
 
         ensure_output_path_is_safe(base_output_dir, load_subdirectory_name, sample_file_name)
         load_output_dir = os.path.join(base_output_dir, load_subdirectory_name)
-        if keep_all_outputs:
-            # Per-temperature sub-folder, NO timestamp -- keeps the job name and
-            # CSV filenames clean so Abaqus's Jobs view can open the ODB directly.
-            temperature_tag = format_temperature_file_label(temperature_value) if temperature_value is not None else 'Temp_None'
-            run_subdirectory_name = sanitize_case_label(temperature_tag)
-            ensure_output_path_is_safe(load_output_dir, run_subdirectory_name, sample_file_name)
-            return os.path.join(load_output_dir, run_subdirectory_name)
         return load_output_dir
 
     def rename_cte_csv_if_present(result_directory, model_name):
@@ -8447,7 +8287,6 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
                     'part': None,
                     'inst': part_for_analysis,
                     'meshsens': meshsens,
-                    'theta_deg': epTheta,
                     'epsilon_x': case_data['epsilon_x'],
                     'epsilon_y': case_data['epsilon_y'],
                     'epsilon_z': case_data['epsilon_z'],
@@ -8544,7 +8383,6 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
             K11, K22, K33, onlyPBC, tps,
             thermal_feasypbc, shared_timestamp,
             output_root_dir=base_output_dir,
-            keep_all_outputs=keep_all_outputs,
             case_label='ThermalConductivity'
         )
 
@@ -8555,7 +8393,7 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
                 E11, E22, E33, G12, G13, G23, onlyPBC,
                 elastic_temperature_points, umatName, feasypbc,
                 shared_timestamp, output_root_dir=base_output_dir,
-                keep_all_outputs=keep_all_outputs, case_label='Elastic'
+                case_label='Elastic'
             )
 
         if CTE:
@@ -8614,41 +8452,3 @@ def Analysis(model_for_analysis, part_for_analysis, meshsens, CPU,
     print(separator)
     print(separator)
 
-def import_easypbc(model_for_analysis, part_for_analysis, import_viscoelastic, import_viscoelastic_freq, import_thermal_conductivity):
-    model = mdb.models[model_for_analysis]
-    part = model.parts[part_for_analysis]
-    
-    import_cohesive = False
-    cohesive_count = 0
-    
-    for element in part.elements:
-        if str(element.type).startswith('COH3'):
-            node1 = part.nodes[element.connectivity[0]]
-            node4 = part.nodes[element.connectivity[3]]
-            if abs(node1.coordinates[2] - node4.coordinates[2]) < 1e-6:
-                import_cohesive = True
-                break
-    
-    if import_cohesive and import_viscoelastic:
-        raise ValueError("Cannot compute viscoelastic properties for models with cohesive zones.")
-    if import_cohesive and import_viscoelastic_freq:
-        raise ValueError("Cannot compute viscoelastic properties for models with cohesive zones.")
-    
-    if import_viscoelastic:
-        # Time-domain viscoelastic relaxation
-        feasypbc = importlib.import_module('PBC_UDFRP_Viscoelastic_Time').feasypbc
-        print("Run PBC_UDFRP_Viscoelastic_Time")
-    elif import_viscoelastic_freq:
-        # Frequency-domain viscoelastic (storage/loss modulus)
-        feasypbc = importlib.import_module('PBC_UDFRP_Viscoelastic_Frequency').feasypbc
-        print("Run PBC_UDFRP_Viscoelastic_Frequency")
-    elif import_thermal_conductivity:
-        # Steady-state thermal conductivity tensor
-        feasypbc = importlib.import_module('PBC_UDFRP_thermal_conductivity').feasypbc
-        print("Run PBC_UDFRP_thermal_conductivity")
-    else:
-        # Default: linear elastic (and CTE if enabled)
-        feasypbc = importlib.import_module('PBC_UDFRP_Elastic_CTE').feasypbc
-        print("Run PBC_UDFRP_Elastic_CTE")
-
-    return feasypbc

@@ -5,6 +5,35 @@
 # Time-domain viscoelastic relaxation analysis of a UDFRP RVE under PBC.
 # Computes the relaxation modulus over a user-defined time window at a given
 # temperature. Called from RVE_Builder_UDFRPs.Analysis when analysis_type == 2.
+#
+# -----------------------------------------------------------------------------
+# Based on EasyPBC Ver. 1.4 (08/10/2018, updated 27/08/2019).
+# Adapted for the "RVE Builder (UDFRPs)" Abaqus plug-in.
+# Modifications Copyright (C) 2026 Yuhao Meng.
+#
+# From EasyPBC:
+#      EasyPBC is an ABAQUS CAE plugin developed to estimate the homogenised
+#      effective elastic properties of user-defined representative volume
+#      elements.
+#      Copyright (C) 2018  Sadik Lafta Omairey
+#
+#      This program is free software: you can redistribute it and/or modify
+#      it under the terms of the GNU General Public License as published by
+#      the Free Software Foundation, either version 3 of the License, or
+#      (at your option) any later version.
+#
+#      This program is distributed in the hope that it will be useful,
+#      but WITHOUT ANY WARRANTY; without even the implied warranty of
+#      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#      GNU General Public License for more details.
+#
+#      You should have received a copy of the GNU General Public License
+#      along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#      Citation: Omairey S, Dunning P, Sriramula S (2018) Development of an
+#      ABAQUS plugin tool for periodic RVE homogenisation.
+#      Engineering with Computers. https://doi.org/10.1007/s00366-018-0616-4
+# -----------------------------------------------------------------------------
 ###############################################################################
 ## Importing ABAQUS Data and Python modules ##
 
@@ -180,8 +209,52 @@ def _prepare_viscoelastic_time_case_model(baseModelName, caseName, relaxationTim
     )
     return caseModelName, assemblyObj, num_steps
 
-def _viscoelastic_job_name(baseModelName, caseName):
-    return '%s-job-%s' % (baseModelName, caseName)
+
+def format_temperature_file_label(temperature_value):
+    """Filesystem-safe label such as Temp_025 or Temp_m050p5 (same convention as the kernel)."""
+    if temperature_value is None:
+        return ''
+    numeric_value = float(temperature_value)
+    sign_prefix = 'm' if numeric_value < 0.0 else ''
+    absolute_text = ('{:.6f}'.format(abs(numeric_value))).rstrip('0').rstrip('.')
+    if absolute_text == '':
+        absolute_text = '0'
+    if '.' in absolute_text:
+        integer_part, fractional_part = absolute_text.split('.', 1)
+        return 'Temp_{}{}p{}'.format(sign_prefix, integer_part.zfill(3), fractional_part)
+    return 'Temp_{}{}'.format(sign_prefix, absolute_text.zfill(3))
+
+def _job_temperature_suffix(intemp, fntemp=None):
+    """'_Temp_025' for a single temperature, '_Temp_025to100' for a ramp, '' if unknown.
+    Appended to job names so ODBs of different temperature points never overwrite each other."""
+    try:
+        lo = float(intemp)
+    except (TypeError, ValueError):
+        return ''
+    try:
+        hi = float(fntemp) if fntemp is not None else lo
+    except (TypeError, ValueError):
+        hi = lo
+    if abs(hi - lo) <= 1.0e-12:
+        return '_' + format_temperature_file_label(lo)
+    return '_' + format_temperature_file_label(lo) + 'to' + format_temperature_file_label(hi).replace('Temp_', '')
+
+def _delete_viscoelastic_case_model(case_model_name):
+    """Delete a temporary model copy (and the job objects that point at it) once its results are read."""
+    try:
+        for job_name in list(mdb.jobs.keys()):
+            try:
+                if str(getattr(mdb.jobs[job_name], 'model', '')) == case_model_name:
+                    del mdb.jobs[job_name]
+            except Exception:
+                pass
+        if case_model_name in mdb.models.keys():
+            del mdb.models[case_model_name]
+    except Exception as cleanup_error:
+        print('Warning: could not delete temporary model %s: %s' % (case_model_name, cleanup_error))
+
+def _viscoelastic_job_name(baseModelName, caseName, temperature=None):
+    return '%s-job-%s%s' % (baseModelName, caseName, _job_temperature_suffix(temperature))
 
 def _insert_viscoelastic_3d_keyword_pbc(modelName, pbcGroup, pbcKeywordArgs):
     setupStart = time.time()
@@ -193,8 +266,6 @@ def _insert_viscoelastic_3d_keyword_pbc(modelName, pbcGroup, pbcKeywordArgs):
     else:
         raise ValueError('Unknown PBC group: %s' % pbcGroup)
     _insert_equation_keywords(modelName, eqs)
-    print('------ Inserted %s %s keyword PBC equations into %s in %.3f s ------' %
-          (len(eqs), pbcGroup, modelName, time.time() - setupStart))
 
 ## Plugin main GUI function ##
 def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, minNumInc, umatName, temperature):
@@ -802,7 +873,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     baseModelName, 'E11', relaxationTime, minNumInc, temperature
                 )
                 modelName = caseModelName
-                jobName = _viscoelastic_job_name(baseModelName, 'E11')
+                jobName = _viscoelastic_job_name(baseModelName, 'E11', temperature)
                 for i in mdb.models[modelName].loads.keys():
                         del mdb.models[modelName].loads[i]
                 for i in mdb.models[modelName].boundaryConditions.keys():
@@ -816,7 +887,6 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                 _insert_viscoelastic_3d_keyword_pbc(modelName, 'E', pbcKeywordArgs)
                 import os, glob
                 
-                mdb.saveAs(pathName=jobName)
                 if jobName in mdb.jobs.keys():
                     del mdb.jobs[jobName]
                 mdb.Job(name=jobName, model=modelName, description='', type=ANALYSIS,
@@ -900,6 +970,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     
                 file.close()
                 o3.close()
+                _delete_viscoelastic_case_model(caseModelName)
                 
                 print(("====> Results have been saved in {}.".format(file_name)))
                 print('---------- Successful calculation of equivalent viscoelasticity E11, V12, V13 ----------')
@@ -916,7 +987,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     baseModelName, 'E22', relaxationTime, minNumInc, temperature
                 )
                 modelName = caseModelName
-                jobName = _viscoelastic_job_name(baseModelName, 'E22')
+                jobName = _viscoelastic_job_name(baseModelName, 'E22', temperature)
                 for i in mdb.models[modelName].loads.keys():
                         del mdb.models[modelName].loads[i]
                 for i in mdb.models[modelName].boundaryConditions.keys():
@@ -930,7 +1001,6 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                 _insert_viscoelastic_3d_keyword_pbc(modelName, 'E', pbcKeywordArgs)
                 import os, glob
                 
-                mdb.saveAs(pathName=jobName)
                 if jobName in mdb.jobs.keys():
                     del mdb.jobs[jobName]
                 mdb.Job(name=jobName, model=modelName, description='', type=ANALYSIS,
@@ -1010,6 +1080,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     
                 file.close()
                 o3.close()
+                _delete_viscoelastic_case_model(caseModelName)
                 
                 print(("====> Results have been saved in {}.".format(file_name)))
                 print('---------- Successful calculation of equivalent viscoelasticity E22, V21, V23 ----------')
@@ -1026,7 +1097,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     baseModelName, 'E33', relaxationTime, minNumInc, temperature
                 )
                 modelName = caseModelName
-                jobName = _viscoelastic_job_name(baseModelName, 'E33')
+                jobName = _viscoelastic_job_name(baseModelName, 'E33', temperature)
                 for i in mdb.models[modelName].loads.keys():
                         del mdb.models[modelName].loads[i]
                 for i in mdb.models[modelName].boundaryConditions.keys():
@@ -1040,7 +1111,6 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                 _insert_viscoelastic_3d_keyword_pbc(modelName, 'E', pbcKeywordArgs)
                 import os, glob
                 
-                mdb.saveAs(pathName=jobName)
                 if jobName in mdb.jobs.keys():
                     del mdb.jobs[jobName]
                 mdb.Job(name=jobName, model=modelName, description='', type=ANALYSIS,
@@ -1120,6 +1190,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     
                 file.close()
                 o3.close()
+                _delete_viscoelastic_case_model(caseModelName)
                 
                 print(("====> Results have been saved in {}.".format(file_name)))
                 print('---------- Successful calculation of equivalent viscoelasticity E33, V31, V32 ----------')
@@ -1135,7 +1206,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     baseModelName, 'G12', relaxationTime, minNumInc, temperature
                 )
                 modelName = caseModelName
-                jobName = _viscoelastic_job_name(baseModelName, 'G12')
+                jobName = _viscoelastic_job_name(baseModelName, 'G12', temperature)
                 for i in mdb.models[modelName].loads.keys():
                         del mdb.models[modelName].loads[i]
                 for i in mdb.models[modelName].boundaryConditions.keys():
@@ -1153,7 +1224,6 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                 _insert_viscoelastic_3d_keyword_pbc(modelName, 'G', pbcKeywordArgs)
                 import os, glob
                 
-                mdb.saveAs(pathName=jobName)
                 if jobName in mdb.jobs.keys():
                     del mdb.jobs[jobName]
                 mdb.Job(name=jobName, model=modelName, description='', type=ANALYSIS,
@@ -1202,6 +1272,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     
                 file.close()
                 o3.close()
+                _delete_viscoelastic_case_model(caseModelName)
                 
                 print(("====> Results have been saved in {}.".format(file_name)))
                 print('---------- Successful calculation of equivalent viscoelasticity G12 ----------')
@@ -1216,7 +1287,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     baseModelName, 'G13', relaxationTime, minNumInc, temperature
                 )
                 modelName = caseModelName
-                jobName = _viscoelastic_job_name(baseModelName, 'G13')
+                jobName = _viscoelastic_job_name(baseModelName, 'G13', temperature)
                 for i in mdb.models[modelName].loads.keys():
                         del mdb.models[modelName].loads[i]
                 for i in mdb.models[modelName].boundaryConditions.keys():
@@ -1234,7 +1305,6 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                 _insert_viscoelastic_3d_keyword_pbc(modelName, 'G', pbcKeywordArgs)
                 import os, glob
                 
-                mdb.saveAs(pathName=jobName)
                 if jobName in mdb.jobs.keys():
                     del mdb.jobs[jobName]
                 mdb.Job(name=jobName, model=modelName, description='', type=ANALYSIS,
@@ -1284,6 +1354,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     
                 file.close()
                 o3.close()
+                _delete_viscoelastic_case_model(caseModelName)
                 
                 print(("====> Results have been saved in {}.".format(file_name)))
                 print('---------- Successful calculation of equivalent viscoelasticity G13 ----------')
@@ -1298,7 +1369,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     baseModelName, 'G23', relaxationTime, minNumInc, temperature
                 )
                 modelName = caseModelName
-                jobName = _viscoelastic_job_name(baseModelName, 'G23')
+                jobName = _viscoelastic_job_name(baseModelName, 'G23', temperature)
                 for i in mdb.models[modelName].loads.keys():
                         del mdb.models[modelName].loads[i]
                 for i in mdb.models[modelName].boundaryConditions.keys():
@@ -1318,7 +1389,6 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                 
                 import os, glob
                 
-                mdb.saveAs(pathName=jobName)
                 if jobName in mdb.jobs.keys():
                     del mdb.jobs[jobName]
                 mdb.Job(name=jobName, model=modelName, description='', type=ANALYSIS,
@@ -1370,6 +1440,7 @@ def feasypbc(part,inst,meshsens,E11,E22,E33,G12,G13,G23,CPU, relaxationTime, min
                     
                 file.close()
                 o3.close()
+                _delete_viscoelastic_case_model(caseModelName)
 
                 print(("====> Results have been saved in {}.".format(file_name)))
                 print('---------- Successful calculation of equivalent viscoelasticity G23 ----------')

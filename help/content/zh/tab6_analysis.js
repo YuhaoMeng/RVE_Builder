@@ -40,10 +40,6 @@ window.helpContent['zh/tab6_analysis'] = `
         <td>RVE 对面节点的匹配容差，应小于最小网格边长。</td></tr>
     <tr><td>Number of CPUs **</td><td>1</td>
         <td>分配给 Abaqus 作业的 CPU 数。超过实际可用数时会自动使用全部可用 CPU。</td></tr>
-    <tr><td>Keep all ABAQUS output files</td><td>（未勾选）</td>
-        <td>勾选后，每个分析案例都会写入以模型名、载荷标签、温度、运行
-        时间戳命名的独立子文件夹，互不覆盖。未勾选时插件会复用 / 覆盖
-        ODB 以节省磁盘。</td></tr>
     <tr><td>UMAT Subroutine</td><td>（留空）</td>
         <td>可选，<strong>对所有分析类型都开放</strong>。如需 Abaqus 调用
         自定义 Fortran <code>.for</code> 子程序，请选择该文件；留空则使用
@@ -154,12 +150,10 @@ window.helpContent['zh/tab6_analysis'] = `
 
     <h4>共享输入（单轴/双轴通用）</h4>
     <ul>
-      <li><strong>Off-axis Angle（度，0&ndash;90）</strong> &mdash;
-          相对纤维轴旋转加载坐标系。spinner 限制在
-          <code>[0, 90]</code>。</li>
       <li><strong>Temperature Points（&deg;C）</strong> &mdash; 可选，
-          逗号分隔的温度列表。每个 case 在每个温度上重跑，输出落到对应
-          子文件夹。</li>
+          逗号分隔的温度列表。每个 case 在每个温度上重跑，同一 case 的
+          各温度结果放在同一子文件夹，作业名和 CSV 名带温度标签
+          （如 <code>Temp_025</code>）。</li>
       <li><strong>Nlgeom</strong>（大变形）&mdash; 复选框，默认<em>开</em>。
           只有当小变形分析足够时才关。</li>
       <li><strong>Unsymmetric matrix storage (UMAT)</strong> &mdash;
@@ -221,12 +215,10 @@ window.helpContent['zh/tab6_analysis'] = `
 
     <h4>共享输入（单轴/双轴通用）</h4>
     <ul>
-      <li><strong>Off-axis Angle（度，0&ndash;90）</strong> &mdash;
-          相对纤维轴旋转加载坐标系。spinner 限制在
-          <code>[0, 90]</code>。</li>
       <li><strong>Temperature Points（&deg;C）</strong> &mdash; 可选，
-          逗号分隔的温度列表。每个 case 在每个温度上重跑，输出落到对应
-          子文件夹。</li>
+          逗号分隔的温度列表。每个 case 在每个温度上重跑，同一 case 的
+          各温度结果放在同一子文件夹，作业名和 CSV 名带温度标签
+          （如 <code>Temp_025</code>）。</li>
       <li><strong>Nlgeom</strong>（大变形）&mdash; 复选框，默认<em>开</em>。
           只有当小变形分析足够时才关。</li>
       <li><strong>Unsymmetric matrix storage (UMAT)</strong> &mdash;
@@ -404,18 +396,18 @@ window.helpContent['zh/tab6_analysis'] = `
   <thead><tr><th>文件</th><th>内容</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>&lt;model&gt;_all_RP_history_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_all_RP_history_&lt;case&gt;.csv</code></td>
       <td>每帧 × 每个 reference point 的历程（U1/U2/U3、RF1/RF2/RF3、
       每个 RP 的 6 个应力 / 应变分量）。</td>
     </tr>
     <tr>
-      <td><code>&lt;model&gt;_macroscopic_stress_strain_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_macroscopic_stress_strain_&lt;case&gt;.csv</code></td>
       <td>每帧完整的 6+6 宏观应力 / 应变张量，外加 von Mises、
       hydrostatic、triaxiality、体积应变、等效应变率。剪切量用
       <code>2*Gamma_ij</code>（工程剪应变）。</td>
     </tr>
     <tr>
-      <td><code>&lt;model&gt;_true_stress_strain_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_true_stress_strain_&lt;case&gt;.csv</code></td>
       <td>加载方向上的真（Cauchy）应力 / 对数应变。列布局根据加载类型不同：
         <ul>
           <li><em>正应变</em>（E11/E22/E33）：4 列数据 &mdash;

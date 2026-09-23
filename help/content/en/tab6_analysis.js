@@ -47,11 +47,6 @@ window.helpContent['en/tab6_analysis'] = `
     <tr><td>Number of CPUs **</td><td>1</td>
         <td>CPUs allocated to the Abaqus job. If you set more than the
         machine has, all available CPUs are used instead.</td></tr>
-    <tr><td>Keep all ABAQUS output files</td><td>(off)</td>
-        <td>When checked, each analysis case writes its ODB / CSV into a
-        dedicated sub-folder named after the model, case label, temperature
-        and run timestamp — nothing gets overwritten. When unchecked, the
-        plug-in is free to overwrite intermediate ODBs to save disk space.</td></tr>
     <tr><td>UMAT Subroutine</td><td>(empty)</td>
         <td>Optional and available for <strong>every analysis type</strong>.
         Browse to a Fortran <code>.for</code> file if you want Abaqus to call
@@ -180,13 +175,11 @@ accordingly.</p>
 
     <h4>Shared inputs</h4>
     <ul>
-      <li><strong>Off-axis Angle (degrees, 0&ndash;90)</strong> &mdash;
-          rotates the load frame relative to the fiber axis. Numeric spinner
-          clamped to <code>[0, 90]</code>.</li>
       <li><strong>Temperature Points (&deg;C)</strong> &mdash; optional
           comma-separated Celsius list. Every uniaxial / biaxial case is
-          re-run at each listed temperature; outputs land in per-temperature
-          sub-folders.</li>
+          re-run at each listed temperature; all points of one load case share
+          its sub-folder, and the job / CSV names carry the temperature tag
+          (e.g. <code>Temp_025</code>).</li>
       <li><strong>Nlgeom</strong> (large deformation) &mdash; checkbox.
           Default <em>on</em>. Turn off only when you are sure small-strain
           analysis is sufficient.</li>
@@ -262,13 +255,11 @@ accordingly.</p>
 
     <h4>Shared inputs</h4>
     <ul>
-      <li><strong>Off-axis Angle (degrees, 0&ndash;90)</strong> &mdash;
-          rotates the load frame relative to the fiber axis. Numeric spinner
-          clamped to <code>[0, 90]</code>.</li>
       <li><strong>Temperature Points (&deg;C)</strong> &mdash; optional
           comma-separated Celsius list. Every uniaxial / biaxial case is
-          re-run at each listed temperature; outputs land in per-temperature
-          sub-folders.</li>
+          re-run at each listed temperature; all points of one load case share
+          its sub-folder, and the job / CSV names carry the temperature tag
+          (e.g. <code>Temp_025</code>).</li>
       <li><strong>Nlgeom</strong> (large deformation) &mdash; checkbox.
           Default <em>on</em>. Turn off only when you are sure small-strain
           analysis is sufficient.</li>
@@ -476,19 +467,19 @@ files into the per-case sub-folder:</p>
   <thead><tr><th>File</th><th>Contents</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>&lt;model&gt;_all_RP_history_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_all_RP_history_&lt;case&gt;.csv</code></td>
       <td>Per-frame, per-reference-point history (U1/U2/U3, RF1/RF2/RF3, the
       6 stress / strain components on each RP).</td>
     </tr>
     <tr>
-      <td><code>&lt;model&gt;_macroscopic_stress_strain_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_macroscopic_stress_strain_&lt;case&gt;.csv</code></td>
       <td>Full 6+6 macroscopic stress / strain tensor per frame, plus von
       Mises stress / strain, hydrostatic pressure, triaxiality, volumetric
       strain, equivalent strain rate. Strains are expressed with
       <code>2*Gamma_ij</code> (engineering shear) for the shear components.</td>
     </tr>
     <tr>
-      <td><code>&lt;model&gt;_true_stress_strain_&lt;case&gt;_theta&lt;deg&gt;.csv</code></td>
+      <td><code>&lt;model&gt;_true_stress_strain_&lt;case&gt;.csv</code></td>
       <td>True (Cauchy) stress / log strain on the active loading direction.
       Layout depends on the load type:
         <ul>

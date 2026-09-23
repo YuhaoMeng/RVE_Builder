@@ -13,7 +13,7 @@ window.helpContent['zh/install'] = `
 
 <h2>安装位置</h2>
 
-<p>把整个 <code>RVE_Builder_plugin</code> 文件夹复制到 Abaqus 的插件目录。
+<p>把整个 <code>RVE_Builder_UDFRP_plugin</code> 文件夹复制到 Abaqus 的插件目录。
 在 Windows 上通常是：</p>
 
 <pre><code>C:\\SIMULIA\\CAE\\plugins\\2024\\</code></pre>

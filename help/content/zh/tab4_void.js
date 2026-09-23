@@ -27,7 +27,7 @@ window.helpContent['zh/tab4_void'] = `
 
 <p>单个数值，单位<strong>百分数</strong>，默认 <code>5.0</code>。
 表示空隙体积占整个 RVE 体积的百分比。插件会把这个分数精确分配到所有插入的
-空隙中 —— 除了物理可行性以外不设隐性上限（即不能要求的空隙 Vf 大于纤维
+空隙中 —— 除了物理可行性以外不设隐性上限（即不能要求的 Vvoid 大于纤维
 插入完之后剩余的实际基体体积）。</p>
 
 <h2>3.4.3 空隙分布（Void Distribution）</h2>
@@ -108,12 +108,21 @@ window.helpContent['zh/tab4_void'] = `
 </table>
 
 <div class="callout callout-note">
-  <div class="callout-title">总空隙 Vf 始终保留</div>
-  <p>无论选哪个优先级，请求的总空隙体积分数都会精确保留。可调整的只是
-  <em>分布形态</em>和<em>单个空隙大小</em>。</p>
+  <div class="callout-title">Vvoid 始终保证</div>
+  <p>无论选哪个优先级，请求的空隙体积分数 <code>Vvoid</code> 都是唯一
+  不会放宽的目标：最后一道修正会在任意空隙上增删边界单元，直到总量落在
+  目标的 99%–101% 之间。可调整的只有 <em>w</em> 和 <em>theta</em>。
+  若连这道修正也无法落入区间（可用单元已耗尽），汇总表会如实说明，
+  而不会报告成功。</p>
 </div>
 
-<h2>3.4.6 空隙形状因子（β）</h2>
+<h2>3.4.6 空隙形状因子（β）— 实验功能</h2>
+
+<div class="callout callout-warn">
+  <div class="callout-title">开发中的实验功能</div>
+  <p>形状因子目前是测试功能，界面和行为可能变化，生成的空隙形状尚未经过
+  验证。正式研究请保持关闭。</p>
+</div>
 
 <p>默认情况下，空隙以纯距离权重生长，得到近似球形的簇团。可选的
 <strong>β</strong> 形状因子会把候选权重偏向一个椭球包络，让空隙沿
@@ -159,7 +168,7 @@ window.helpContent['zh/tab4_void'] = `
 <p>对每个模型，插件会：</p>
 <ol>
   <li>把每个基体单元归类为<em>纤维相邻</em>或<em>基体内部</em>（见 3.4.3）。</li>
-  <li>从对应类别中整单元删除，直到达到目标空隙 Vf。</li>
+  <li>从对应类别中整单元删除，直到达到目标 Vvoid。</li>
   <li>给删除的区域打 Set 标签 <code>Set-Void</code>，便于在 Abaqus 的 Mesh
       模块中查看。</li>
   <li>更新材料 Section 分配，使空隙区域不再承载材料。</li>
@@ -167,10 +176,33 @@ window.helpContent['zh/tab4_void'] = `
       输入一致。</li>
 </ol>
 
+<h3>消息区的打印内容</h3>
+
+<p>详细数值都会写入磁盘，因此消息区保持简短：每个模型处理完打印一行，
+整批结束后打印一张汇总表。</p>
+
+<pre>Inserting voids into 5 models; target Vvoid = 5.0000%.
+  [1/5] RVE_..._Model_1: 12 void(s), Vvoid = 5.0132%, OK (34.2 s)
+  ...
+Void insertion summary: 5 models -- 4 within tolerance, 1 relaxed, 0 not met
+Target: Vvoid = 5.0000%, theta = 12, w = 0.500
+  model             voids  Vvoid (%)    dev (%)       w  time (s)  status
+  RVE_..._Model_1      12     5.0132    +0.0132   0.502      34.2  OK
+  RVE_..._Model_3      11     5.0410    +0.0410   0.480     151.7  relaxed: theta, w</pre>
+
+<p><em>status</em> 列为 <code>OK</code> 表示所有目标都在严格容差内达成；
+<code>relaxed: theta, w</code> 表示为了收敛放宽了对应目标的容差；
+若为一段简短说明，则表示该目标未能达成。涉及 <code>Vvoid</code> 的说明
+优先显示，因为它是必须达成的目标。常见的一条是
+<code>w = 0.50 unreachable: every matrix element touches a fiber</code>：
+纤维体积分数高而网格较粗时，几乎没有"基体内部"单元可供放置空隙，
+w 实际被网格锁定为 1。此时应加密网格，或对这类模型直接取 w = 1。
+逐个模型的详细数据仍在下面的统计文件夹中。</p>
+
 <h3>写到磁盘的统计文件夹</h3>
 
 <p>插件每次运行都会在 Abaqus 工作目录下新建一个文件夹，名为
-<code>Void_Statistics_&lt;model&gt;_&lt;YYYYMMDD_HHMMSS&gt;</code>。
+<code>Void_Statistics_&lt;model&gt;</code>。
 内容如下：</p>
 
 <table>
@@ -178,7 +210,7 @@ window.helpContent['zh/tab4_void'] = `
   <tbody>
     <tr><td><code>void_summary_report.txt</code></td>
         <td>顶层报告 —— 用户输入、RVE 尺寸、目标 vs <strong>实际</strong>
-        空隙 Vf、纤维相邻 / 基体内部分配、实际 <code>w</code>、与目标的
+        Vvoid、纤维相邻 / 基体内部分配、实际 <code>w</code>、与目标的
         偏差。<em>请先打开它。</em></td></tr>
     <tr><td><code>void_sizes.csv</code></td>
         <td>每个空隙：ID、类型（near-fiber / inter-matrix）、体积、
@@ -187,8 +219,8 @@ window.helpContent['zh/tab4_void'] = `
         三个方向余弦向量 <code>(e1, e2, e3)</code>，
         以及主轴 <code>e1</code> 与全局纤维 X 轴的方向余弦相似度。</td></tr>
     <tr><td><code>void_fiber_surface_breakdown.csv</code></td>
-        <td>每根纤维的表面破坏：纤维 ID、周长代理量、界面节点总数、
-        被破坏的界面节点数，以及比值 <code>r_i = 破坏 / 总数</code>。</td></tr>
+        <td>每根纤维的表面破坏：纤维 ID、界面单元面数（同时作为周长代理量）、
+        被破坏的界面面数，以及比值 <code>r_i = 破坏 / 总数</code>。</td></tr>
     <tr><td><code>void_nn_distances.csv</code></td>
         <td>空隙之间的第一、第二近邻距离。</td></tr>
     <tr><td><code>void_ripleys_k.csv</code></td>
@@ -204,7 +236,8 @@ window.helpContent['zh/tab4_void'] = `
 
 <p>当纤维中心可用时，<code>void_summary_report.txt</code> 末尾会追加 5 个
 反映空隙对纤维–基体界面破坏程度的浓度指标。记 <code>r_i</code> 为第
-<code>i</code> 根纤维的破坏节点比，<code>N_f</code> 为纤维总数：</p>
+<code>i</code> 根纤维的破坏面比（界面面指纤维单元与基体或空隙单元共享的
+单元面，相邻单元为空隙时记为破坏），<code>N_f</code> 为纤维总数：</p>
 
 <table class="field-table">
   <thead><tr><th>指标</th><th>定义 / 解读</th></tr></thead>
@@ -213,7 +246,7 @@ window.helpContent['zh/tab4_void'] = `
         <td>有<em>任意</em>破坏的纤维占比
             （<code>r_i > 0</code> 的纤维数除以 <code>N_f</code>）。</td></tr>
     <tr><td><code>f_area</code></td>
-        <td>总体破坏面积比 = 所有纤维的破坏节点总数 / 界面节点总数。</td></tr>
+        <td>总体破坏面积比 = 所有纤维的破坏界面面总数 / 界面面总数。</td></tr>
     <tr><td><code>r_avg_broken</code></td>
         <td>仅对受影响纤维的 <code>r_i</code> 求均值。</td></tr>
     <tr><td><code>C_focus</code></td>
