@@ -106,13 +106,28 @@ automatically selects the interface-aware variants
 
 ## Citation
 
-If this plug-in supports your research, please cite:
+If this plug-in supports your research, please cite the following article,
+which describes the algorithms implemented here (Spatially Controlled Reduction
+Method, Constrained Seed Growth, and the multiscale UMAT workflow):
 
-> Yuhao Meng, Murilo Augusto Vaz, Marcelo Caire. *An efficient micromechanical
-> framework for elastic and viscoelastic properties prediction of
-> unidirectional continuous fiber-reinforced polymers with microvoids.*
-> Composite Structures, Vol. 387, 2026, 120307. ISSN 0263-8223.
-> https://doi.org/10.1016/j.compstruct.2026.120307
+> Yuhao Meng, Murilo Augusto Vaz, Marcelo Caire. *Micromechanical and finite
+> element investigation of the influence of microvoid distribution on the
+> transversely isotropic viscoelastic behavior of fiber-reinforced
+> composites.* Composites Part B: Engineering, 2026, 114303.
+> https://doi.org/10.1016/j.compositesb.2026.114303
+
+```bibtex
+@article{Meng2026CompositesB,
+  author  = {Meng, Yuhao and Vaz, Murilo Augusto and Caire, Marcelo},
+  title   = {Micromechanical and finite element investigation of the influence
+             of microvoid distribution on the transversely isotropic
+             viscoelastic behavior of fiber-reinforced composites},
+  journal = {Composites Part B: Engineering},
+  year    = {2026},
+  pages   = {114303},
+  doi     = {10.1016/j.compositesb.2026.114303}
+}
+```
 
 Please also cite the underlying EasyPBC work:
 

@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this plug-in, please cite the article below."
+title: "RVE Builder (UDFRPs)"
+type: software
+authors:
+  - family-names: Meng
+    given-names: Yuhao
+    affiliation: "Ocean Engineering Program, COPPE, Universidade Federal do Rio de Janeiro"
+repository-code: "https://github.com/YuhaoMeng/RVE_Builder"
+license: GPL-3.0
+preferred-citation:
+  type: article
+  title: "Micromechanical and finite element investigation of the influence of microvoid distribution on the transversely isotropic viscoelastic behavior of fiber-reinforced composites"
+  authors:
+    - family-names: Meng
+      given-names: Yuhao
+    - family-names: Vaz
+      given-names: Murilo Augusto
+    - family-names: Caire
+      given-names: Marcelo
+  journal: "Composites Part B: Engineering"
+  year: 2026
+  start: 114303
+  doi: "10.1016/j.compositesb.2026.114303"
