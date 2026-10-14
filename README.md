@@ -116,18 +116,8 @@ Method, Constrained Seed Growth, and the multiscale UMAT workflow):
 > composites.* Composites Part B: Engineering, 2026, 114303.
 > https://doi.org/10.1016/j.compositesb.2026.114303
 
-```bibtex
-@article{Meng2026CompositesB,
-  author  = {Meng, Yuhao and Vaz, Murilo Augusto and Caire, Marcelo},
-  title   = {Micromechanical and finite element investigation of the influence
-             of microvoid distribution on the transversely isotropic
-             viscoelastic behavior of fiber-reinforced composites},
-  journal = {Composites Part B: Engineering},
-  year    = {2026},
-  pages   = {114303},
-  doi     = {10.1016/j.compositesb.2026.114303}
-}
-```
+APA and BibTeX formats are available from the **Cite this repository** button
+on the repository page.
 
 Please also cite the underlying EasyPBC work:
 
