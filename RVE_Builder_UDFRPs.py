@@ -3084,7 +3084,7 @@ def _tet_or_hex_volume(coords):
         return vol
 
     if n == 8:   # C3D8 linear hex -- 6 tetrahedra decomposition
-        tets = ((0,1,3,4),(1,2,3,6),(1,3,4,6),(3,4,6,7),(1,4,5,6),(3,4,7,6))
+        tets = ((0,1,2,6),(0,2,3,6),(0,3,7,6),(0,7,4,6),(0,4,5,6),(0,5,1,6))
         vol = 0.0
         for a, b, c, d in tets:
             v1, v2, v3 = coords[b] - coords[a], coords[c] - coords[a], coords[d] - coords[a]
@@ -3093,7 +3093,7 @@ def _tet_or_hex_volume(coords):
 
     if n == 20:  # C3D20 quadratic hex -- use 8 corner nodes (0..7)
         corners = coords[:8]
-        tets = ((0,1,3,4),(1,2,3,6),(1,3,4,6),(3,4,6,7),(1,4,5,6),(3,4,7,6))
+        tets = ((0,1,2,6),(0,2,3,6),(0,3,7,6),(0,7,4,6),(0,4,5,6),(0,5,1,6))
         vol = 0.0
         for a, b, c, d in tets:
             v1, v2, v3 = corners[b] - corners[a], corners[c] - corners[a], corners[d] - corners[a]
